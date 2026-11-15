@@ -127,14 +127,12 @@ grep -q "POST https://api.github.com/repos/conahcnuj/conahcnuj/pulls/15/comments
 grep -q "comments/<comment_id>/replies" "${LOG}" || { echo "FAIL: the feedback prompt does not tell the agent the reply endpoint"; exit 1; }
 grep -q "comment 12345 by reviewer" "${LOG}" || { echo "FAIL: the feedback prompt does not name the thread comment to answer"; exit 1; }
 
-# The prompt carries the collected context: the PR's open thread and the
-# checkout's orientation files, but never the resolved thread.
+# The prompt carries the collected context: the PR's open thread, but never the
+# resolved thread. Orientation files are no longer collected by default.
 grep -q "Collected context:" "${LOG}" || { echo "FAIL: the prompt has no collected context block"; exit 1; }
 grep -q "Please document the collected context" "${LOG}" || { echo "FAIL: the open review thread was not collected"; exit 1; }
 grep -q "Already settled thread" "${LOG}" && { echo "FAIL: a resolved review thread was collected"; exit 1; }
-grep -q "Resume fixture README" "${LOG}" || { echo "FAIL: README.md was not collected"; exit 1; }
-grep -q "Resume fixture rule" "${LOG}" || { echo "FAIL: AGENTS.md was not collected"; exit 1; }
-grep -q "Collected context up front: unresolved review threads of PR #15, README.md, AGENTS.md" "${LOG}" || { echo "FAIL: the run log does not say what was collected"; exit 1; }
+grep -q "Collected context up front: unresolved review threads of PR #15" "${LOG}" || { echo "FAIL: the run log does not say what was collected"; exit 1; }
 
 [[ "$(git -C "${WORK}" branch --show-current)" == "feature/fix-10" ]] || { echo "FAIL: wrong current branch"; exit 1; }
 # Capture first, then grep via here-string: `git log | grep -q` under

@@ -64,6 +64,8 @@ stdout: username=x-access-token
 - bot ID が未キャッシュなら公開 API を叩くため初回はネットワークが必要
   （[bot-user-id.sh](#bot-user-idsh)）
 - ドライバは起動時に自動でこれを実行する（`CONAHCNUJ_TEST_MODE=1` では除く）
+- 既定では何も出力しない（run ログを埋めない）。設定内容の一覧を見たいときは
+  `CONAHCNUJ_SETUP_GIT_VERBOSE=1` を付ける
 - 設定後は `git ls-remote https://github.com/<owner>/<repo>.git HEAD` で疎通確認
 
 ## bot-user-id.sh

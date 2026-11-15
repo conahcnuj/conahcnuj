@@ -41,17 +41,18 @@ out="$(collect_initial_context "conahcnuj" "conahcnuj" "15" < "${TAPE}" 2>"${ERR
 [[ "${out}" == *"- [comment 101 by reviewer] Please document the flag"* ]] || { echo "FAIL: the first open thread was not collected"; exit 1; }
 [[ "${out}" == *"- [comment 102 by reviewer] And add a test"* ]] || { echo "FAIL: the second open thread was not collected"; exit 1; }
 [[ "${out}" != *"Already settled"* ]] || { echo "FAIL: a resolved thread was collected"; exit 1; }
-[[ "${out}" == *"README.md:"* ]] || { echo "FAIL: README.md has no section"; exit 1; }
-[[ "${out}" == *"Orientation fixture README"* ]] || { echo "FAIL: README.md content is missing"; exit 1; }
-[[ "${out}" == *"AGENTS.md:"* ]] || { echo "FAIL: AGENTS.md has no section"; exit 1; }
-[[ "${out}" == *"AGENTS fixture rule"* ]] || { echo "FAIL: AGENTS.md content is missing"; exit 1; }
-grep -q "Collected context up front: unresolved review threads of PR #15, README.md, AGENTS.md" "${ERR}" || { echo "FAIL: the run log does not say what was collected"; cat "${ERR}" >&2; exit 1; }
+# Orientation files are no longer collected by default (too much noise); only the
+# unresolved review threads ride along for a resumed PR.
+[[ "${out}" != *"README.md:"* ]] || { echo "FAIL: README.md was collected by default"; exit 1; }
+[[ "${out}" != *"AGENTS.md:"* ]] || { echo "FAIL: AGENTS.md was collected by default"; exit 1; }
+grep -q "Collected context up front: unresolved review threads of PR #15" "${ERR}" || { echo "FAIL: the run log does not say what was collected"; cat "${ERR}" >&2; exit 1; }
 
 # A fresh issue has no PR to read threads from: the same payload would have
 # produced them above, so its absence proves no API call was made.
 out="$(collect_initial_context "conahcnuj" "conahcnuj" "" < "${TAPE}" 2>/dev/null)"
 [[ "${out}" != *"Unresolved review threads"* ]] || { echo "FAIL: an issue was treated as a PR"; exit 1; }
-[[ "${out}" == *"Orientation fixture README"* ]] || { echo "FAIL: the files were not collected for a fresh issue"; exit 1; }
+# No orientation files are collected by default, so a fresh issue collects nothing.
+[[ -z "${out}" ]] || { echo "FAIL: expected nothing to collect for a fresh issue, got: ${out}"; exit 1; }
 
 # CONAHCNUJ_CONTEXT_FILES narrows the list to what the run actually wants.
 printf 'Notes fixture\n' > NOTES.md
@@ -60,8 +61,8 @@ out="$(collect_initial_context "conahcnuj" "conahcnuj" "" < /dev/null 2>/dev/nul
 [[ "${out}" == *"Notes fixture"* ]] || { echo "FAIL: the configured file was not collected"; exit 1; }
 [[ "${out}" != *"README.md:"* ]] || { echo "FAIL: the default files were collected despite the override"; exit 1; }
 
-# An explicitly empty value sends no files at all (an unset one keeps the
-# default list, which the assertions above already exercised).
+# An explicitly empty value sends no files at all (and so does an unset one now,
+# since the default list is empty).
 export CONAHCNUJ_CONTEXT_FILES=""
 out="$(collect_initial_context "conahcnuj" "conahcnuj" "" < /dev/null 2>/dev/null)"
 [[ -z "${out}" ]] || { echo "FAIL: empty CONAHCNUJ_CONTEXT_FILES still collected files"; exit 1; }
