@@ -114,8 +114,8 @@ provider の rate limit（`Rate limit exceeded. Please try again later.`）で�
 
 - issue / PR の本文（`Issue:` ブロック。もともとプロンプトに入っている）
 - PR を再開するときの未解決レビュースレッド（解決済みは対象外）
-- 作業ツリーの orientation ファイル（既定 `README.md` と `AGENTS.md`。
-  `CONAHCNUJ_CONTEXT_FILES` で変更、空文字で送らない）
+- 作業ツリーの orientation ファイル（既定では送らない。必要なら
+  `CONAHCNUJ_CONTEXT_FILES` で指定、空文字で送らない）
 
 収集はブランチの checkout の直後に 1 度だけ行い、実行ログにも
 `Collected context up front: ...` として何が同梱されたかを残します。
@@ -169,7 +169,7 @@ provider の rate limit（`Rate limit exceeded. Please try again later.`）で�
 | `CONAHCNUJ_MAX_EFFORT` | 未設定 | 非空で max effort モード（opencode に `--variant max` を渡す）。`--max-effort` フラグまたは `CONAHCNUJ_EFFORT=max` でも有効 |
 | `CONAHCNUJ_OPENCODE_LOG_LEVEL` | `warn` | opencode の `--log-level`（デバッグは `debug`） |
 | `CONAHCNUJ_OWN_WORKFLOWS` | `Issue auto-drive,Owner-approved auto-merge` | 制約チェックから除外する自 workflow（デッドロック防止）。空で無効。issue driver の job 名（`Attempt to resolve issue`）と auto-merge の job 名（`enable`）も除外し、reusable workflow として他リポジトリから呼ばれ workflow 名が呼び出し側になる場合も待たない |
-| `CONAHCNUJ_CONTEXT_FILES` | `README.md AGENTS.md` | プロンプトへ同梱する作業ツリーファイル（スペース区切り。空で無効） |
+| `CONAHCNUJ_CONTEXT_FILES` | 空（同梱しない） | プロンプトへ同梱する作業ツリーファイル（スペース区切り。既定では送らず、明示したときだけ送る） |
 | `CONAHCNUJ_MISSING_MODELS_FILE` | `<gh-app>/missing-models` | 永久に使えないモデルの記録先（ラウンド前に読み、判明したモデルを追記） |
 | `CONAHCNUJ_RATE_LIMIT_WATCH_SECONDS` | `1` | provider の rate limit を検知してラウンドを打ち切る監視間隔（秒） |
 | `CONAHCNUJ_TEST_MODE` | `0` | `1` で offline テストモード（モック API テープ + モック opencode） |
