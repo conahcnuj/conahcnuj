@@ -183,10 +183,8 @@ jobs:
 
 利用側リポジトリへコピーして使うテンプレートを
 `.github/workflow-templates/` に用意しています（`auto-drive.yml` /
-`auto-merge.yml`）。コピー先は `.github/workflows/` です。conahcnuj リポジトリ
-自身の「New workflow」画面ではこれらのテンプレートを選んで配置できますが、
-別リポジトリ（別アカウント・別 Organization）では自動では表示されないため、
-その場合はテンプレートファイルを `.github/workflows/` へコピーしてください。
+`auto-merge.yml`）。コピー先は `.github/workflows/` です。テンプレートファイルを
+`.github/workflows/` へコピーして使ってください。
 例:
 
 ```sh
