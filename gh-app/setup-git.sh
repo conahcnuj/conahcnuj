@@ -46,7 +46,9 @@ git config "${SCOPE}" commit.gpgsign false
 # not only inside an opencode session whose plugin injects it via GIT_CONFIG_*.
 git config "${SCOPE}" alias.vc "${API_COMMIT_CMD}"
 
-echo "Configured (${SCOPE}):"
-git config ${SCOPE} --get-regexp "^(user\.(name|email)|credential\.helper|commit\.gpgsign|alias\.vc)$" 2>/dev/null || true
-echo
-echo "Test with: git ls-remote https://github.com/<owner>/<repo>.git HEAD"
+if [[ "${CONAHCNUJ_SETUP_GIT_VERBOSE:-0}" == "1" ]]; then
+  echo "Configured (${SCOPE}):"
+  git config ${SCOPE} --get-regexp "^(user\.(name|email)|credential\.helper|commit\.gpgsign|alias\.vc)$" 2>/dev/null || true
+  echo
+  echo "Test with: git ls-remote https://github.com/<owner>/<repo>.git HEAD"
+fi

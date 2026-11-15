@@ -1122,8 +1122,12 @@ ${threads}"
 
   local file_list file content
   # No colon in the expansion: an explicitly empty CONAHCNUJ_CONTEXT_FILES
-  # means "collect no files at all", while an unset one keeps the default.
-  file_list="${CONAHCNUJ_CONTEXT_FILES-README.md AGENTS.md}"
+  # means "collect no files at all", and an unset one now also collects no
+  # files by default. The orientation files (README.md / AGENTS.md) used to
+  # be pulled in wholesale, but dumping them into every prompt (and into the
+  # run log) was too much noise; the agent reads them itself when it needs
+  # them. Opt in with CONAHCNUJ_CONTEXT_FILES="README.md AGENTS.md".
+  file_list="${CONAHCNUJ_CONTEXT_FILES-}"
   while IFS= read -r file; do
     [[ -f "${file}" ]] || continue
     content="$(cat -- "${file}" | sed 's/[[:space:]]*$//')"
