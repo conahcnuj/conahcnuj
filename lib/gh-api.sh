@@ -525,7 +525,7 @@ gh_api_fetch_reviews() {
 # here. The fingerprint still uses the full payload to detect new feedback.
 gh_api_review_summary() {
   local json
-  json="$(gh_api_read_line)"
+  json="$(cat)"
 
   if command -v node >/dev/null 2>&1; then
     printf '%s' "${json}" | node -e '
@@ -568,15 +568,15 @@ gh_api_review_summary() {
   printf 'reviewDecision: %s\n' "${decision:-NONE}"
 
   local threads_part
-  threads_part="$(printf '%s' "${json}" | sed -n 's/.*"reviewThreads":{"nodes":\(.*\)/\1/p')"
-  if echo "${threads_part}" | grep -q '"isResolved":false'; then
+  threads_part="$(printf '%s' "${json}" | sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p')"
+  if printf '%s' "${threads_part}" | grep -q '"isResolved"[[:space:]]*:[[:space:]]*false'; then
     echo "REVIEW THREADS (unresolved):"
   fi
   gh_api_format_unresolved_threads "${json}"
 }
 gh_api_unresolved_threads() {
   local json
-  json="$(gh_api_read_line)"
+  json="$(cat)"
   gh_api_format_unresolved_threads "${json}"
 }
 
@@ -618,7 +618,7 @@ gh_api_format_unresolved_threads() {
   fi
 
   local threads_part tn
-  threads_part="$(printf '%s' "${json}" | sed -n 's/.*"reviewThreads":{"nodes":\(.*\)/\1/p')"
+  threads_part="$(printf '%s' "${json}" | sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p')"
 
   while IFS= read -r tn; do
     [[ -z "${tn}" ]] && continue
@@ -635,7 +635,7 @@ gh_api_format_unresolved_threads() {
       else
         printf -- '- %s\n' "${cb}"
       fi
-    done < <(printf '%s' "${tn}" | grep -oE '\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}' || true)
+    done < <(printf '%s' "${tn}" | grep -oE '\{[[:space:]]*"databaseId"[[:space:]]*:[[:space:]]*[0-9]+[[:space:]]*,[[:space:]]*"body"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*,[[:space:]]*"author"[[:space:]]*:[[:space:]]*\{[[:space:]]*"login"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*\}[[:space:]]*\}' || true)
     if [[ "${printed}" != "true" ]]; then
       local bn
       while IFS= read -r bn; do
@@ -643,7 +643,7 @@ gh_api_format_unresolved_threads() {
         printf -- '- %s\n' "${bn}"
       done < <(printf '%s' "${tn}" | grep -oE '"body":"[^"]*"' | sed 's/"body":"//; s/"$//' || true)
     fi
-  done < <(printf '%s' "${threads_part}" | grep -oE '\{"isResolved":false,"comments":\{"nodes":\[[^]]*\]' || true)
+  done < <(printf '%s' "${threads_part}" | grep -oE '\{"isResolved"[[:space:]]*:[[:space:]]*false[[:space:]]*,[[:space:]]*"comments"[[:space:]]*:[[:space:]]*\{"nodes"[[:space:]]*:[[:space:]]*\[[^]]*\]' || true)
 }
 gh_api_review_fingerprint() {
   local raw="${1}" matches="" decision=""

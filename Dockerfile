@@ -28,6 +28,7 @@ RUN apt-get update \
         grep \
         openssl \
         sed \
+        nodejs \
         tar \
         unzip \
         xz-utils \
