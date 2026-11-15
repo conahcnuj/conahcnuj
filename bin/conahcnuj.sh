@@ -2057,7 +2057,7 @@ start_issue() {
   # earlier run), so a second initial commit is never stacked on top of one.
   if [[ "$(branch_commit_count "${default_oid}" "${default_branch}")" == "0" ]]; then
     echo "Creating an initial commit with TODO.jsonl so a draft PR can be opened early." >&2
-    printf '{"task":"Implement issue #%s: %s"}\\n' "${num}" "${title}" > TODO.jsonl
+    printf '{"task":"Implement issue #%s: %s"}\n' "${num}" "${title}" > TODO.jsonl
     INITIAL_TODO_CONTENT="$(cat TODO.jsonl)"
     git add -A -- TODO.jsonl >/dev/null 2>&1 || true
     if [[ "${TEST_MODE}" == "1" ]]; then
