@@ -1716,6 +1716,7 @@ drive() {
   # asks again until new review feedback makes it work a fresh round: the job is
   # to take the PR to the owner's approval, not to stop at the request.
   local handed_off="false"
+  local reply_pending="false"
 
   while true; do
     # The budget expired. Once the PR is with the reviewer, that is simply a
@@ -1869,6 +1870,7 @@ drive() {
       # then the driver must keep driving rather than wait.
       handed_off="false"
       conflict_fix_pushed="false"
+      reply_pending="true"
       echo "New review feedback detected; addressing it." >&2
       # The coding agent answers the reviewer in the thread itself (the reply
       # endpoint and every thread comment id are in the summary), besides any
@@ -1911,6 +1913,7 @@ ${summary}"
         echo "No thread reply was posted for this feedback; continuing." >&2
       fi
       rm -f .commit-msg
+      reply_pending="false"
       request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
       log_review_handoff "${owner}" "${repo}" "${pr}" "${REVIEWER:-${owner}}"
       if [[ "${CI_MODE}" == "true" ]]; then
@@ -1991,6 +1994,20 @@ ${summary}"
 
     conflict_fix_pushed="false"
     echo "PR #${pr}: non-reviewer constraints satisfied." >&2
+    # If a feedback round's reply was deferred (its first poll failed on a
+    # conflict or a CI failure), post it now that the branch is green and
+    # conflict-free, before handing the PR back (push -> CI -> comment ->
+    # request review).
+    if [[ "${reply_pending}" == "true" ]]; then
+      local reply_prompt="The pull request branch has been updated and every check passes with no merge conflict. Reply in each unresolved review thread below, saying what you changed or answering the question. Post the reply with the GitHub API (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies is the reply endpoint; \${GH_TOKEN} is set) using the comment id shown for each thread. Do not make code changes, do not commit, and do not request review.
+
+${summary}"
+      if ! implement "${title}" "${body}" "" "${base}" "${reply_prompt}"; then
+        echo "No thread reply was posted for this feedback; continuing." >&2
+      fi
+      rm -f .commit-msg
+      reply_pending="false"
+    fi
     # The constraints pass, so the PR is ready for a human: hand it over. The
     # run does not end here; the next loop iteration waits for the verdict.
     request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
