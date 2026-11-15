@@ -1492,6 +1492,31 @@ poll_conditions() {
             rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
             continue
           fi
+          # Phantom conflict: GitHub reports CONFLICTING/DIRTY but the base
+          # merges cleanly into the branch locally (usually a rename-detection
+          # difference between git and GitHub's merge machinery). The branch's
+          # remote ancestry lacks the base, so ask GitHub to merge the base in
+          # via update-branch, which creates a verified merge commit. If that
+          # succeeds, sync the working tree and wait for GitHub to recompute
+          # instead of sending the agent into a conflict round that can only
+          # re-push the same tree (#932).
+          if git rev-parse --verify "origin/${base}" >/dev/null 2>&1 && git merge --no-commit --no-ff "origin/${base}" >/dev/null 2>&1; then
+            git merge --abort >/dev/null 2>&1 || true
+            echo "PR #${pr}: base branch '${base}' merges cleanly locally; asking GitHub to update the branch." >&2
+            if gh_api_update_pr_branch "${owner}" "${repo}" "${pr}"; then
+              local _br
+              _br="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+              if [[ -n "${_br}" ]]; then
+                git fetch origin "${_br}" >/dev/null 2>&1 || true
+                git reset --hard "origin/${_br}" >/dev/null 2>&1 || true
+              fi
+              rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
+              continue
+            fi
+            echo "PR #${pr}: GitHub could not update the branch; treating it as a real conflict." >&2
+          else
+            git merge --abort >/dev/null 2>&1 || true
+          fi
         fi
         CONSTRAINT_FAILURE="conflict"
         echo "PR #${pr} has a merge conflict with its base branch (mergeable=${mergeable} mergeState=${mss}); the branch must be merged with the base and the conflicts resolved." >&2

@@ -939,3 +939,22 @@ gh_api_merge_pr() {
     gh_api_graphql "${query}" >/dev/null
   fi
 }
+# Ask GitHub to merge the base branch into a PR's head branch, creating a
+# verified merge commit on the remote (PUT /repos/{owner}/{repo}/pulls/{pr}/
+# update-branch). Used to clear phantom conflicts that git reports as clean
+# locally but GitHub reports as CONFLICTING. Output: none. Return 0 on success.
+gh_api_update_pr_branch() {
+  local owner="${1}" repo="${2}" pr_number="${3}"
+  if [[ "${GH_API_TEST_MODE:-0}" == "1" ]]; then
+    gh_api_read_line >/dev/null || true
+    return 0
+  fi
+  local url="https://api.github.com/repos/${owner}/${repo}/pulls/${pr_number}/update-branch"
+  local code
+  gh_api_call PUT "${url}" '{}' >/dev/null 2>&1 || true
+  code="${GH_API_LAST_HTTP_CODE:-}"
+  case "${code}" in
+    200|201|202|204) return 0 ;;
+    *) return 1 ;;
+  esac
+}
