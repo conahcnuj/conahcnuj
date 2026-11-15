@@ -15,6 +15,20 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+# Fail fast on a missing/empty/non-numeric installation id, before any cached
+# token is reused and before any early-exit path (--print-pem-path included):
+# an empty/non-numeric id must never reach the token endpoint or be treated as
+# valid configuration.
+INSTALLATION_ID="${INSTALLATION_ID:-}"
+if [[ -z "${INSTALLATION_ID}" ]]; then
+  echo "ERROR: INSTALLATION_ID is not set or empty / invalid (do not pass an empty installation id; must be a numeric installation id, digits only; Invalid INSTALLATION_ID; see gh-app/app.env or app.env.example)." >&2
+  exit 1
+fi
+if [[ ! "${INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: INSTALLATION_ID is not set or empty / invalid (do not pass an empty installation id; must be a numeric installation id, digits only; Invalid INSTALLATION_ID; see gh-app/app.env or app.env.example)." >&2
+  exit 1
+fi
+
 # Expand ~, then accept a WSL /mnt/<drive>/ path when this bash is Git Bash.
 # Git Bash has no /mnt/<drive> mount, so openssl looks under its install
 # directory (C:/Program Files/Git/mnt/...). /<drive>/... is the same file.
@@ -44,18 +58,6 @@ API_BASE="${GH_APP_API_BASE:-https://api.github.com}"
 if [[ "${1:-}" == "--print-pem-path" ]]; then
   printf '%s\n' "${PEM_PATH}"
   exit 0
-fi
-
-# Fail fast on a missing/empty/non-numeric installation id, even when a
-# cached token is present: an empty id must never reach the token endpoint.
-INSTALLATION_ID="${INSTALLATION_ID:-}"
-if [[ -z "${INSTALLATION_ID}" ]]; then
-  echo "ERROR: INSTALLATION_ID is not set or empty / invalid (do not pass an empty installation id; must be a numeric installation id, digits only; Invalid INSTALLATION_ID; see gh-app/app.env or app.env.example)." >&2
-  exit 1
-fi
-if [[ ! "${INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then
-  echo "ERROR: INSTALLATION_ID is not set or empty / invalid (do not pass an empty installation id; must be a numeric installation id, digits only; Invalid INSTALLATION_ID; see gh-app/app.env or app.env.example)." >&2
-  exit 1
 fi
 
 # Return cached token if still valid (installation tokens live ~1h).
