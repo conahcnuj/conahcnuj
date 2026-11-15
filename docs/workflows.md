@@ -101,7 +101,8 @@ jobs:
   （`job.workflow_repository` at `job.workflow_sha`）から取るため、
   呼び出し側に `bin/` / `gh-app/` / `lib/` は不要
 - 駆動対象がドライバのリポジトリと異なる場合（他リポジトリからの呼び出し）は、
-  対象リポジトリを `target/` にも checkout し、ドライバをその中で実行する。
+  対象リポジトリをワーキングツリーのルートへ通常どおり checkout し、
+  ドライバは `driver/` の checkout から実行する（`cd target` はしない）。
   するとブランチ作成・fetch・Verified コミットも、エージェントの編集も、
   ローカル実行と同じく対象リポジトリに対して行われる
 - バグ報告 issue は常にドライバのリポジトリ（`conahcnuj/conahcnuj`）へ作られるが、

@@ -95,35 +95,49 @@ jobs:
           if [[ ! "${INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then echo "::error::Invalid installation-id (must be digits only; do not pass an empty installation id). See Getting started step 3." >&2; exit 1; fi
           if [[ -z "${PRIVATE_KEY}" ]]; then echo "::error::Missing PRIVATE_KEY secret (pass secrets.PRIVATE_KEY). See Getting started step 3." >&2; exit 1; fi
 
-      # Check out the driver source, i.e. this workflow's own repository: for
-      # a cross-repository `workflow_call` the default checkout would be the
-      # caller's repository, which has no driver. For this repository's own
-      # events these are identical to the caller's repository and SHA.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      # Check out the driver source. For the driver's own repository it lands in
+      # the working tree root (which is also the target). For a cross-repository
+      # call it lands in `driver/` so the target repository can be cloned
+      # normally into the root (see below) instead of into a `target/` subdir.
+      - name: Check out the driver source (same repository)
+        if: ${{ (inputs.repository || github.repository) == job.workflow_repository }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
 
-      # The coding agent edits the target repository, so when the target is not
-      # the driver's own repository (a cross-repository call) check it out as
-      # well and run the driver from inside it (see the last step). The driver's
-      # git operations (branch creation, fetch, Verified commits) and the
-      # agent's edits then all act on the target, matching a local run, instead
-      # of on the driver checkout. For the driver's own repository the single
-      # checkout above already is the target and is used as the working tree.
+      - name: Check out the driver source (cross-repository)
+        if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: driver
+
+      # Check out the target repository normally (into the working tree root)
+      # when it is not the driver's own repository. The driver is then run with
+      # the target root as its working directory (no `cd target`), so branch
+      # creation, fetches, Verified commits and the agent's edits all act on the
+      # target, matching a local run.
       - name: Check out the target repository
         if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: ${{ inputs.repository || github.repository }}
-          path: target
           fetch-depth: 0
 
       # opencode is not preinstalled on runners; shared with ci.yml through the
       # install-opencode composite action (authenticated release lookup so
-      # shared runner IPs do not hit the API rate limit).
+      # shared runner IPs do not hit the API rate limit). The composite action
+      # lives in the driver checkout, which is at the root for a same-repository
+      # run and under `driver/` for a cross-repository run.
       - name: Install opencode
+        if: ${{ (inputs.repository || github.repository) == job.workflow_repository }}
         uses: ./.github/actions/install-opencode
+
+      - name: Install opencode (cross-repository)
+        if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
+        uses: ./driver/.github/actions/install-opencode
 
       # The driver reads gh-app/app.env like any local run. The private key is
       # staged from the sealed secret, outside the work tree, so `git add -A`
@@ -137,24 +151,26 @@ jobs:
           INSTALLATION_ID: ${{ secrets.INSTALLATION_ID }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
+          CROSS_REPO: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
         run: |
           if [[ -z "${APP_ID}" ]]; then echo "::error::Missing APP_ID secret (pass secrets.APP_ID). See Getting started step 3." >&2; exit 1; fi
           if [[ -z "${INSTALLATION_ID}" ]]; then echo "::error::Missing installation-id (do not pass an empty INSTALLATION_ID; pass secrets.INSTALLATION_ID). See Getting started step 3." >&2; exit 1; fi
           if [[ ! "${INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then echo "::error::Invalid installation-id (must be digits only; do not pass an empty installation id). See Getting started step 3." >&2; exit 1; fi
           if [[ -z "${PRIVATE_KEY}" ]]; then echo "::error::Missing PRIVATE_KEY secret (pass secrets.PRIVATE_KEY). See Getting started step 3." >&2; exit 1; fi
+          if [[ "${CROSS_REPO}" == "true" ]]; then ghapp="${GITHUB_WORKSPACE}/driver/gh-app"; else ghapp="${GITHUB_WORKSPACE}/gh-app"; fi
           pem="$RUNNER_TEMP/conahcnuj-app.pem"
           printf '%s\n' "$PRIVATE_KEY" > "$pem"
           chmod 600 "$pem"
-          cat > gh-app/app.env <<EOF
+          cat > "${ghapp}/app.env" <<EOF
           APP_ID="$APP_ID"
           INSTALLATION_ID="$INSTALLATION_ID"
           PRIVATE_KEY_PATH="$pem"
           BASH_EXE="/usr/bin/bash"
           EOF
-          APP_SLUG="$(bash gh-app/app-slug.sh)"
-          printf 'APP_SLUG="%s"\n' "${APP_SLUG}" >> gh-app/app.env
-          BOT_USER_ID="$(bash gh-app/bot-user-id.sh)"
-          printf 'BOT_USER_ID="%s"\n' "${BOT_USER_ID}" >> gh-app/app.env
+          APP_SLUG="$(bash "${ghapp}/app-slug.sh")"
+          printf 'APP_SLUG="%s"\n' "${APP_SLUG}" >> "${ghapp}/app.env"
+          BOT_USER_ID="$(bash "${ghapp}/bot-user-id.sh")"
+          printf 'BOT_USER_ID="%s"\n' "${BOT_USER_ID}" >> "${ghapp}/app.env"
 
       - name: Run the conahcnuj driver
         env:
@@ -164,9 +180,9 @@ jobs:
           # checkout below puts the driver's own repository name in origin, so
           # relying on origin detection would drive the wrong repository.
           CONAHCNUJ_REPO: ${{ inputs.repository || github.repository }}
-          # When true the driver runs from the `target/` checkout (same value as
-          # the target checkout step's `if`). For the driver's own repository it
-          # runs from the workspace root, the driver checkout itself.
+          # When true the target is a separate checkout (the driver runs from
+          # `driver/` while its working directory is the target root). For the
+          # driver's own repository it runs from the workspace root.
           CONAHCNUJ_CROSS_REPO: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
           CONAHCNUJ_INPUT: ${{ inputs.number || github.event_name == 'issues' && github.event.issue.number || github.event_name == 'pull_request_review' && github.event.pull_request.number || (github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0].number) }}
           # Just under the 60-minute job cap so the driver exits gracefully
@@ -176,11 +192,13 @@ jobs:
           OPENCODE_DISABLE_AUTOUPDATE: "true"
         run: |
           [[ "${CONAHCNUJ_INPUT}" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid issue or pull request number: ${CONAHCNUJ_INPUT}" >&2; exit 1; }
-          # Absolute path so the driver source is still found after cd'ing into
-          # the target checkout; the driver resolves its own directory from it.
-          driver="${PWD}/bin/conahcnuj.sh"
+          # Absolute path to the driver binary: beside the driver checkout (root
+          # for a same-repository run, `driver/` for a cross-repository run). The
+          # working directory stays the target root, so no `cd` is needed.
           if [[ "${CONAHCNUJ_CROSS_REPO}" == "true" ]]; then
-            echo "Driving ${CONAHCNUJ_REPO} from the target checkout." >&2
-            cd target
+            driver="${GITHUB_WORKSPACE}/driver/bin/conahcnuj.sh"
+            echo "Driving ${CONAHCNUJ_REPO} from the driver checkout (target root is the working directory)." >&2
+          else
+            driver="${GITHUB_WORKSPACE}/bin/conahcnuj.sh"
           fi
           bash "${driver}" "${CONAHCNUJ_INPUT}"
