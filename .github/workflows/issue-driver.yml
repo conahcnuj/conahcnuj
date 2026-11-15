@@ -139,6 +139,15 @@ jobs:
         if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
         uses: ./driver/.github/actions/install-opencode
 
+      - name: Install the driver (cross-repository)
+        if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+            -File "${GITHUB_WORKSPACE}/driver/install.ps1"
+          rm -rf "${GITHUB_WORKSPACE}/driver"
+
       # The driver reads gh-app/app.env like any local run. The private key is
       # staged from the sealed secret, outside the work tree, so `git add -A`
       # can never pick it up. The App slug is not staged from a secret: it is
@@ -157,7 +166,13 @@ jobs:
           if [[ -z "${INSTALLATION_ID}" ]]; then echo "::error::Missing installation-id (do not pass an empty INSTALLATION_ID; pass secrets.INSTALLATION_ID). See Getting started step 3." >&2; exit 1; fi
           if [[ ! "${INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then echo "::error::Invalid installation-id (must be digits only; do not pass an empty installation id). See Getting started step 3." >&2; exit 1; fi
           if [[ -z "${PRIVATE_KEY}" ]]; then echo "::error::Missing PRIVATE_KEY secret (pass secrets.PRIVATE_KEY). See Getting started step 3." >&2; exit 1; fi
-          if [[ "${CROSS_REPO}" == "true" ]]; then ghapp="${GITHUB_WORKSPACE}/driver/gh-app"; else ghapp="${GITHUB_WORKSPACE}/gh-app"; fi
+          if [[ "${CROSS_REPO}" == "true" ]]; then
+            ghapp="${HOME}/.local/gh-app"
+            ghapp_config="${HOME}/.config/opencode/gh-app"
+          else
+            ghapp="${GITHUB_WORKSPACE}/gh-app"
+            ghapp_config="${GITHUB_WORKSPACE}/gh-app"
+          fi
           pem="$RUNNER_TEMP/conahcnuj-app.pem"
           printf '%s\n' "$PRIVATE_KEY" > "$pem"
           chmod 600 "$pem"
@@ -171,6 +186,9 @@ jobs:
           printf 'APP_SLUG="%s"\n' "${APP_SLUG}" >> "${ghapp}/app.env"
           BOT_USER_ID="$(bash "${ghapp}/bot-user-id.sh")"
           printf 'BOT_USER_ID="%s"\n' "${BOT_USER_ID}" >> "${ghapp}/app.env"
+          if [[ "${CROSS_REPO}" == "true" ]]; then
+            cp "${ghapp}/app.env" "${ghapp_config}/app.env"
+          fi
 
       - name: Run the conahcnuj driver
         env:
@@ -196,8 +214,8 @@ jobs:
           # for a same-repository run, `driver/` for a cross-repository run). The
           # working directory stays the target root, so no `cd` is needed.
           if [[ "${CONAHCNUJ_CROSS_REPO}" == "true" ]]; then
-            driver="${GITHUB_WORKSPACE}/driver/bin/conahcnuj.sh"
-            echo "Driving ${CONAHCNUJ_REPO} from the driver checkout (target root is the working directory)." >&2
+            driver="${HOME}/.local/bin/conahcnuj"
+            echo "Driving ${CONAHCNUJ_REPO} from the installed driver (target root is the working directory)." >&2
           else
             driver="${GITHUB_WORKSPACE}/bin/conahcnuj.sh"
           fi
