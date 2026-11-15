@@ -123,21 +123,16 @@ jobs:
         if: ${{ (inputs.repository || github.repository) == job.workflow_repository }}
         uses: ./.github/actions/install-opencode
 
-      # In a cross-repository run the driver checkout lives under `driver/`. Do
-      # the installs that depend on it BEFORE checking out the target
-      # repository: the target checkout (even with `clean: false`) has been
-      # observed to wipe `driver/`, which made `./driver/.github/actions/
-      # install-opencode` unresolvable ("Can't find 'action.yml' ... under the
-      # driver repo"). Installing first removes that dependency on `driver/`
-      # surviving the target checkout. The opencode install is inlined here so it
-      # does not depend on the composite action file being present at all.
+      # In a cross-repository run the driver checkout lives under `driver/`,
+      # which a later target checkout can wipe, making a local
+      # `./driver/.github/actions/install-opencode` reference unresolvable
+      # ("Can't find 'action.yml' ... under the driver repo"). Reference the
+      # composite action from the conahcnuj repository directly instead, so no
+      # local checkout of it is needed:
+      # https://github.com/conahcnuj/conahcnuj/blob/main/.github/actions/install-opencode/action.yml
       - name: Install opencode (cross-repository)
         if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
-        shell: bash
-        run: |
-          curl -fsSL https://opencode.ai/v2/install | bash
-          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        uses: conahcnuj/conahcnuj/.github/actions/install-opencode@main
 
       - name: Install the driver (cross-repository)
         if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
