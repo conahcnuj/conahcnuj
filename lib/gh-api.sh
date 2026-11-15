@@ -13,6 +13,10 @@
 # caller supplies one JSON document per API call, in call order.
 
 set -euo pipefail
+# Ignore SIGPIPE so a closed consumer (e.g. head) cannot kill this
+# shell or print "printf: write error: Broken pipe"; failed writes are
+# handled by the `2>/dev/null || true` guards on each printf.
+trap '' PIPE
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GH_APP_DIR="${GH_APP_DIR:-${HERE}/../gh-app}"
@@ -47,7 +51,7 @@ gh_api_unescape() {
   s="${s//\\r/$'\r'}"
   s="${s//\\\\/\\}"
   s="${s//\\\"/\"}"
-  printf '%s' "${s}"
+  printf '%s' "${s}" 2>/dev/null || true
 }
 
 # JSON-escape a string for embedding inside a GraphQL query string or a JSON
@@ -87,13 +91,13 @@ gh_api_escape() {
 gh_api_read_line() {
   local line=""
   IFS= read -r line || true
-  printf '%s\n' "${line}"
+  printf '%s\n' "${line}" 2>/dev/null || true
 }
 
 # App installation token. Test mode returns a dummy without any network I/O.
 gh_api_get_token() {
   if [[ "${GH_API_TEST_MODE:-0}" == "1" ]]; then
-    printf '%s\n' "test-token"
+    printf '%s\n' "test-token" 2>/dev/null || true
     return 0
   fi
   bash "${GH_APP_DIR}/get-token.sh"
@@ -140,7 +144,7 @@ gh_api_call() {
   local datafile=""
   if [[ -n "${data}" ]]; then
     datafile="$(mktemp)"
-    printf '%s' "${data}" > "${datafile}"
+    printf '%s' "${data}" > "${datafile}" 2>/dev/null || true
   fi
   attempt=0
   while [[ ${attempt} -lt 5 ]]; do
@@ -198,13 +202,13 @@ gh_api_graphql() {
     local parts=()
     local i
     for i in "${!var_keys[@]}"; do
-      parts+=("$(printf '"%s":"%s"' "${var_keys[i]}" "${var_vals[i]}")")
+      parts+=("$(printf '"%s":"%s"' "${var_keys[i]}" "${var_vals[i]}")") 2>/dev/null || true
     done
     local IFS=,
     vars_json="{${parts[*]}}"
   fi
   local payload
-  payload="$(printf '{"query":"%s","variables":%s}' "$(gh_api_escape "${query}")" "${vars_json}")"
+  payload="$(printf '{"query":"%s","variables":%s}' "$(gh_api_escape "${query}")" "${vars_json}")" 2>/dev/null || true
   # Run gh_api_call in this shell (its stdout goes to a file) rather than in a
   # command substitution: a command substitution is a subshell, so the
   # GH_API_LAST_HTTP_CODE gh_api_call sets would be lost and this function would
@@ -240,7 +244,7 @@ gh_api_graphql() {
     echo "GitHub API error: ${message}" >&2
     return 1
   fi
-  printf '%s\n' "${json}"
+  printf '%s\n' "${json}" 2>/dev/null || true
 }
 
 # --- JSON field extraction (single-line, compact JSON best) ----------------
@@ -253,7 +257,7 @@ gh_api_json_str() {
   val="$(sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" <<<"${json}")"
   val="${val%%$'\n'*}"
   if [[ -n "${val}" ]]; then
-    printf '%s\n' "${val}"
+    printf '%s\n' "${val}" 2>/dev/null || true
     return 0
   fi
   # Try unquoted value (bool, null, number, bare enum)
@@ -261,7 +265,7 @@ gh_api_json_str() {
   val="${val%%$'\n'*}"
   # Trim whitespace
   val="$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' <<<"${val}")"
-  printf '%s\n' "${val}"
+  printf '%s\n' "${val}" 2>/dev/null || true
 }
 
 # Numeric field value.
@@ -269,7 +273,7 @@ gh_api_json_num() {
   local json="${1}" key="${2}"
   local out
   out="$(sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" <<<"${json}")"
-  printf '%s\n' "${out%%$'\n'*}"
+  printf '%s\n' "${out%%$'\n'*}" 2>/dev/null || true
 }
 
 # --- Issues / PRs -----------------------------------------------------------
@@ -287,11 +291,11 @@ gh_api_fetch_issue() {
   title="$(gh_api_json_str "${json}" "title")"
   body="$(gh_api_json_str "${json}" "body")"
   labels="$(sed -n 's/.*"labels"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p' <<<"${json}")"
-  if grep -q '"pull_request"' <<<"${json}"; then
+  if grep '"pull_request"' <<<"${json}" >/dev/null; then
     is_pr="true"
   fi
 
-  printf '%s|%s|%s|%s\n' "$(gh_api_b64 "${title}")" "$(gh_api_b64 "${body}")" "$(gh_api_b64 "${labels}")" "${is_pr}"
+  printf '%s|%s|%s|%s\n' "$(gh_api_b64 "${title}")" "$(gh_api_b64 "${body}")" "$(gh_api_b64 "${labels}")" "${is_pr}" 2>/dev/null || true
 }
 
 # Repo default branch info. Output: default_branch|default_oid
@@ -307,7 +311,7 @@ gh_api_get_repo() {
   local branch oid
   branch="$(gh_api_json_str "${json}" "name")"
   oid="$(gh_api_json_str "${json}" "oid")"
-  printf '%s|%s\n' "${branch}" "${oid}"
+  printf '%s|%s\n' "${branch}" "${oid}" 2>/dev/null || true
 }
 
 # PR state summary for resume.
@@ -340,7 +344,7 @@ gh_api_fetch_pr_state() {
 
   printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
     "${number}" "${state}" "$(gh_api_b64 "${title}")" "$(gh_api_b64 "${body}")" \
-    "${is_draft}" "${mergeable}" "${mss}" "${decision}" "${head}" "${base}" "${head_oid}" "${linked}"
+    "${is_draft}" "${mergeable}" "${mss}" "${decision}" "${head}" "${base}" "${head_oid}" "${linked}" 2>/dev/null || true
 }
 
 # Workflows whose checks the driver must not treat as a constraint. Both of
@@ -381,7 +385,7 @@ gh_api_rollup_state() {
   fi
   # More contexts than one page holds: the aggregate would be computed from an
   # incomplete list, so trust the rollup's own state instead of guessing.
-  if grep -q '"contexts":{"nodes":\[.*\],"pageInfo":{"hasNextPage":true}' <<<"${json}"; then
+  if grep '"contexts":{"nodes":\[.*\],"pageInfo":{"hasNextPage":true}' <<<"${json}" >/dev/null; then
     gh_api_json_str "${json}" "state"
     return 0
   fi
@@ -454,11 +458,11 @@ gh_api_rollup_state() {
   done < <(printf '%s\n' "${contexts}" 2>/dev/null | sed 's/},{/}\n{/g' || true)
 
   if [[ "${result}" == "FAILURE" ]]; then
-    printf '%s\n' "FAILURE"
+    printf '%s\n' "FAILURE" 2>/dev/null || true
   elif [[ "${pending}" == "true" ]]; then
-    printf '%s\n' "PENDING"
+    printf '%s\n' "PENDING" 2>/dev/null || true
   else
-    printf '%s\n' "SUCCESS"
+    printf '%s\n' "SUCCESS" 2>/dev/null || true
   fi
 }
 
@@ -504,7 +508,7 @@ gh_api_fetch_pr_conditions() {
   # up that aggregate instead (fields come back in query order).
   pr_state="$(sed -n 's/.*"mergeStateStatus"[[:space:]]*:[[:space:]]*"[^"]*",[[:space:]]*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"${json}")"
   pr_state="${pr_state%%$'\n'*}"
-  printf '%s|%s|%s|%s\n' "${state}" "${mergeable}" "${mss}" "${pr_state}"
+  printf '%s|%s|%s|%s\n' "${state}" "${mergeable}" "${mss}" "${pr_state}" 2>/dev/null || true
 }
 
 # Review status + raw payload.
@@ -521,7 +525,7 @@ gh_api_fetch_reviews() {
 
   local decision
   decision="$(gh_api_json_str "${json}" "reviewDecision")"
-  printf '%s|%s\n' "${decision}" "$(gh_api_b64 "${json}")"
+  printf '%s|%s\n' "${decision}" "$(gh_api_b64 "${json}")" 2>/dev/null || true
 }
 
 # Turn a raw reviews GraphQL payload (stdin) into readable feedback text.
@@ -570,11 +574,11 @@ gh_api_review_summary() {
 
   local decision
   decision="$(gh_api_json_str "${json}" "reviewDecision")"
-  printf 'reviewDecision: %s\n' "${decision:-NONE}"
+  printf 'reviewDecision: %s\n' "${decision:-NONE}" 2>/dev/null || true
 
   local threads_part
   threads_part="$(sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p' <<<"${json}")"
-  if grep -q '"isResolved"[[:space:]]*:[[:space:]]*false' <<<"${threads_part}"; then
+  if grep '"isResolved"[[:space:]]*:[[:space:]]*false' <<<"${threads_part}" >/dev/null; then
     echo "REVIEW THREADS (unresolved):"
   fi
   gh_api_format_unresolved_threads "${json}"
@@ -636,16 +640,16 @@ gh_api_format_unresolved_threads() {
       [[ -n "${cb}" ]] || cb="(no body)"
       printed="true"
       if [[ -n "${cid}" ]]; then
-        printf -- '- [comment %s by %s] %s\n' "${cid}" "${ca:-unknown}" "${cb}"
+        printf -- '- [comment %s by %s] %s\n' "${cid}" "${ca:-unknown}" "${cb}" 2>/dev/null || true
       else
-        printf -- '- %s\n' "${cb}"
+        printf -- '- %s\n' "${cb}" 2>/dev/null || true
       fi
     done < <(grep -oE '\{[[:space:]]*"databaseId"[[:space:]]*:[[:space:]]*[0-9]+[[:space:]]*,[[:space:]]*"body"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*,[[:space:]]*"author"[[:space:]]*:[[:space:]]*\{[[:space:]]*"login"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*\}[[:space:]]*\}' <<<"${tn}" || true)
     if [[ "${printed}" != "true" ]]; then
       local bn
       while IFS= read -r bn; do
         [[ -z "${bn}" ]] && continue
-        printf -- '- %s\n' "${bn}"
+        printf -- '- %s\n' "${bn}" 2>/dev/null || true
       done < <(grep -oE '"body":"[^"]*"' <<<"${tn}" | sed 's/"body":"//; s/"$//' || true)
     fi
   done < <(grep -oE '\{"isResolved"[[:space:]]*:[[:space:]]*false[[:space:]]*,[[:space:]]*"comments"[[:space:]]*:[[:space:]]*\{"nodes"[[:space:]]*:[[:space:]]*\[[^]]*\]' <<<"${threads_part}" || true)
@@ -696,7 +700,7 @@ gh_api_find_pr_by_head_any() {
   num="$(gh_api_json_num "${json}" "number")"
   state="$(gh_api_json_str "${json}" "state")"
   if [[ -n "${num}" && -n "${state}" ]]; then
-    printf '%s|%s\n' "${num}" "${state}"
+    printf '%s|%s\n' "${num}" "${state}" 2>/dev/null || true
   fi
 }
 
@@ -716,7 +720,7 @@ gh_api_installation_repo_access() {
       printf 'unknown\n' 2>/dev/null || true
       return 0
     fi
-    if grep -Fq "\"${full}\"" <<<"${json}"; then
+    if grep -F "\"${full}\"" <<<"${json}" >/dev/null; then
       printf 'yes\n' 2>/dev/null || true
       return 0
     fi
@@ -891,8 +895,8 @@ gh_api_requested_reviewers() {
     sed 's/^"login"[[:space:]]*:[[:space:]]*"//; s/"$//' || true)"
   teams="$(grep -oE '"slug"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${json}" |
     sed 's/^"slug"[[:space:]]*:[[:space:]]*"//; s/"$//; s/^/team:/' || true)"
-  [[ -n "${logins}" ]] && printf '%s\n' "${logins}"
-  [[ -n "${teams}" ]] && printf '%s\n' "${teams}"
+  [[ -n "${logins}" ]] && printf '%s\n' "${logins}" 2>/dev/null || true
+  [[ -n "${teams}" ]] && printf '%s\n' "${teams}" 2>/dev/null || true
   return 0
 }
 
@@ -939,7 +943,7 @@ gh_api_labels_json() {
     out="${out}\"$(gh_api_escape "${p}")\""
   done
   out="${out}]"
-  printf '%s' "${out}"
+  printf '%s' "${out}" 2>/dev/null || true
 }
 
 # Create an issue. Args: owner repo title body. Output: issue number.
