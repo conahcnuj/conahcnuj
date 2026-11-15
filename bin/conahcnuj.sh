@@ -1740,6 +1740,16 @@ drive() {
     # may commit. It keeps polling the PR instead of crashing over files it was
     # never asked to commit.
     if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
+      # Work is resuming after a hand-off: a leftover commit on an already-ready
+      # PR means the "ready" declaration is no longer truthful, so convert the
+      # PR back to a draft before committing and let the normal flow re-verify
+      # and re-hand it over (issue #916).
+      if [[ "${pr_draft:-false}" == "false" && -n "${pr:-}" ]]; then
+        echo "Work resuming after hand-off; converting PR #${pr} back to a draft." >&2
+        gh_api_convert_pr_to_draft "${owner}" "${repo}" "${pr}" || echo "WARNING: could not convert PR #${pr} back to a draft; continuing." >&2
+        pr_draft="true"
+        handed_off="false"
+      fi
       commit_changes
       # After committing our own fix, wait for CI to re-run instead of
       # immediately trying to implement (which would fail if nothing changed).
