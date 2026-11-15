@@ -62,8 +62,7 @@ gh_api_unescape() {
 # carriage-return bytes before printing them (issue #156: the bug report for
 # #155 was rejected on exactly that, so the report itself was lost).
 gh_api_escape() {
-  printf '%s' "${1}" |
-    sed 's/\\/\\\\/g; s/"/\\"/g' |
+  sed 's/\\/\\\\/g; s/"/\\"/g' <<<"${1}" |
     awk '
       BEGIN {
         # NUL (0) is included too: an embedded null byte must never reach a
@@ -229,14 +228,14 @@ gh_api_graphql() {
   fi
   # Check for GraphQL errors (returned with HTTP 200 but have errors field)
   local errors
-  errors="$(printf '%s' "${json}" | sed -n 's/.*"errors"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p')"
+  errors="$(sed -n 's/.*"errors"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p' <<<"${json}")"
   if [[ -n "${errors}" && "${errors}" != "[]" ]]; then
     echo "GraphQL error: ${errors}" >&2
     return 1
   fi
   # Check for GitHub API error responses (e.g., {"message":"Bad credentials"})
   local message
-  message="$(printf '%s' "${json}" | sed -n 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  message="$(sed -n 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"${json}")"
   if [[ -n "${message}" ]]; then
     echo "GitHub API error: ${message}" >&2
     return 1
@@ -251,22 +250,26 @@ gh_api_json_str() {
   local json="${1}" key="${2}"
   local val
   # Try quoted string first
-  val="$(printf '%s' "${json}" | sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -1)"
+  val="$(sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" <<<"${json}")"
+  val="${val%%$'\n'*}"
   if [[ -n "${val}" ]]; then
     printf '%s\n' "${val}"
     return 0
   fi
   # Try unquoted value (bool, null, number, bare enum)
-  val="$(printf '%s' "${json}" | sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/p" | head -1)"
+  val="$(sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/p" <<<"${json}")"
+  val="${val%%$'\n'*}"
   # Trim whitespace
-  val="$(printf '%s' "${val}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  val="$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' <<<"${val}")"
   printf '%s\n' "${val}"
 }
 
 # Numeric field value.
 gh_api_json_num() {
   local json="${1}" key="${2}"
-  printf '%s' "${json}" | sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" | head -1
+  local out
+  out="$(sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" <<<"${json}")"
+  printf '%s\n' "${out%%$'\n'*}"
 }
 
 # --- Issues / PRs -----------------------------------------------------------
@@ -283,8 +286,8 @@ gh_api_fetch_issue() {
   local title body labels is_pr="false"
   title="$(gh_api_json_str "${json}" "title")"
   body="$(gh_api_json_str "${json}" "body")"
-  labels="$(printf '%s' "${json}" | sed -n 's/.*"labels"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p')"
-  if printf '%s' "${json}" | grep -q '"pull_request"'; then
+  labels="$(sed -n 's/.*"labels"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p' <<<"${json}")"
+  if grep -q '"pull_request"' <<<"${json}"; then
     is_pr="true"
   fi
 
@@ -322,7 +325,8 @@ gh_api_fetch_pr_state() {
   state="$(gh_api_json_str "${json}" "state")"
   title="$(gh_api_json_str "${json}" "title")"
   body="$(gh_api_json_str "${json}" "body")"
-  is_draft="$(printf '%s' "${json}" | sed -n 's/.*"isDraft"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' | head -1)"
+  is_draft="$(sed -n 's/.*"isDraft"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' <<<"${json}")"
+  is_draft="${is_draft%%$'\n'*}"
   mergeable="$(gh_api_json_str "${json}" "mergeable")"
   mss="$(gh_api_json_str "${json}" "mergeStateStatus")"
   decision="$(gh_api_json_str "${json}" "reviewDecision")"
@@ -331,7 +335,7 @@ gh_api_fetch_pr_state() {
   head_oid="$(gh_api_json_str "${json}" "headRefOid")"
   # Only count numbers inside closingIssuesReferences' nodes, never the PR itself.
   local refs_part
-  refs_part="$(printf '%s' "${json}" | sed -n 's/.*"closingIssuesReferences".*"nodes":[[:space:]]*\(\[[^]]*\]\).*/\1/p')"
+  refs_part="$(sed -n 's/.*"closingIssuesReferences".*"nodes":[[:space:]]*\(\[[^]]*\]\).*/\1/p' <<<"${json}")"
   linked="$(gh_api_json_num "${refs_part}" "number")"
 
   printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
@@ -377,13 +381,13 @@ gh_api_rollup_state() {
   fi
   # More contexts than one page holds: the aggregate would be computed from an
   # incomplete list, so trust the rollup's own state instead of guessing.
-  if printf '%s' "${json}" | grep -q '"contexts":{"nodes":\[.*\],"pageInfo":{"hasNextPage":true}'; then
+  if grep -q '"contexts":{"nodes":\[.*\],"pageInfo":{"hasNextPage":true}' <<<"${json}"; then
     gh_api_json_str "${json}" "state"
     return 0
   fi
   # Every context is a flat object, so the only "},{" inside the array separates
   # two of them: splitting there yields one context per line.
-  contexts="$(printf '%s' "${json}" | sed -n 's/.*"contexts":{"nodes":[[:space:]]*\(\[[^]]*\]\).*/\1/p')"
+  contexts="$(sed -n 's/.*"contexts":{"nodes":[[:space:]]*\(\[[^]]*\]\).*/\1/p' <<<"${json}")"
   while IFS= read -r node; do
     [[ -n "${node}" ]] || continue
     type="$(gh_api_json_str "${node}" "__typename")"
@@ -401,7 +405,7 @@ gh_api_rollup_state() {
         # A check run that belongs to one of the skipped workflows is left out of
         # the aggregate entirely: neither its pending nor its failed state may
         # gate the run that is doing the polling.
-        workflow="$(printf '%s' "${node}" | sed -n 's/.*"workflow":{"name":"\([^"]*\)".*/\1/p')"
+        workflow="$(sed -n 's/.*"workflow":{"name":"\([^"]*\)".*/\1/p' <<<"${node}")"
         # The issue driver keeps the same job name ("Attempt to resolve issue")
         # whether it runs in this repository or as a reusable workflow called by
         # another repository. A reusable workflow's check run is reported under
@@ -489,7 +493,7 @@ gh_api_fetch_pr_conditions() {
   fi
 
   local state mergeable mss pr_state
-  state="$(printf '%s' "${json}" | gh_api_rollup_state "${CONAHCNUJ_OWN_WORKFLOWS}")"
+  state="$(gh_api_rollup_state "${CONAHCNUJ_OWN_WORKFLOWS}" <<<"${json}")"
   if [[ -z "${state}" ]]; then
     state="SUCCESS"
   fi
@@ -498,7 +502,8 @@ gh_api_fetch_pr_conditions() {
   # The PR's own state, anchored to the field right after mergeStateStatus:
   # statusCheckRollup has a "state" of its own and a bare key match would pick
   # up that aggregate instead (fields come back in query order).
-  pr_state="$(printf '%s' "${json}" | sed -n 's/.*"mergeStateStatus"[[:space:]]*:[[:space:]]*"[^"]*",[[:space:]]*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+  pr_state="$(sed -n 's/.*"mergeStateStatus"[[:space:]]*:[[:space:]]*"[^"]*",[[:space:]]*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"${json}")"
+  pr_state="${pr_state%%$'\n'*}"
   printf '%s|%s|%s|%s\n' "${state}" "${mergeable}" "${mss}" "${pr_state}"
 }
 
@@ -528,7 +533,7 @@ gh_api_review_summary() {
   json="$(cat)"
 
   if command -v node >/dev/null 2>&1; then
-    printf '%s' "${json}" | node -e '
+    node -e '
       let data = "";
       process.stdin.on("data", c => data += c);
       process.stdin.on("end", () => {
@@ -559,7 +564,7 @@ gh_api_review_summary() {
         } catch (e) {
         }
       });
-    '
+    ' <<<"${json}"
     return 0
   fi
 
@@ -568,8 +573,8 @@ gh_api_review_summary() {
   printf 'reviewDecision: %s\n' "${decision:-NONE}"
 
   local threads_part
-  threads_part="$(printf '%s' "${json}" | sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p')"
-  if printf '%s' "${threads_part}" | grep -q '"isResolved"[[:space:]]*:[[:space:]]*false'; then
+  threads_part="$(sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p' <<<"${json}")"
+  if grep -q '"isResolved"[[:space:]]*:[[:space:]]*false' <<<"${threads_part}"; then
     echo "REVIEW THREADS (unresolved):"
   fi
   gh_api_format_unresolved_threads "${json}"
@@ -586,7 +591,7 @@ gh_api_unresolved_threads() {
 gh_api_format_unresolved_threads() {
   local json="${1}"
   if command -v node >/dev/null 2>&1; then
-    printf '%s' "${json}" | node -e '
+    node -e '
       let data = "";
       process.stdin.on("data", c => data += c);
       process.stdin.on("end", () => {
@@ -613,12 +618,12 @@ gh_api_format_unresolved_threads() {
         } catch (e) {
         }
       });
-    '
+    ' <<<"${json}"
     return 0
   fi
 
   local threads_part tn
-  threads_part="$(printf '%s' "${json}" | sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p')"
+  threads_part="$(sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p' <<<"${json}")"
 
   while IFS= read -r tn; do
     [[ -z "${tn}" ]] && continue
@@ -635,15 +640,15 @@ gh_api_format_unresolved_threads() {
       else
         printf -- '- %s\n' "${cb}"
       fi
-    done < <(printf '%s' "${tn}" | grep -oE '\{[[:space:]]*"databaseId"[[:space:]]*:[[:space:]]*[0-9]+[[:space:]]*,[[:space:]]*"body"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*,[[:space:]]*"author"[[:space:]]*:[[:space:]]*\{[[:space:]]*"login"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*\}[[:space:]]*\}' || true)
+    done < <(grep -oE '\{[[:space:]]*"databaseId"[[:space:]]*:[[:space:]]*[0-9]+[[:space:]]*,[[:space:]]*"body"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*,[[:space:]]*"author"[[:space:]]*:[[:space:]]*\{[[:space:]]*"login"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*\}[[:space:]]*\}' <<<"${tn}" || true)
     if [[ "${printed}" != "true" ]]; then
       local bn
       while IFS= read -r bn; do
         [[ -z "${bn}" ]] && continue
         printf -- '- %s\n' "${bn}"
-      done < <(printf '%s' "${tn}" | grep -oE '"body":"[^"]*"' | sed 's/"body":"//; s/"$//' || true)
+      done < <(grep -oE '"body":"[^"]*"' <<<"${tn}" | sed 's/"body":"//; s/"$//' || true)
     fi
-  done < <(printf '%s' "${threads_part}" | grep -oE '\{"isResolved"[[:space:]]*:[[:space:]]*false[[:space:]]*,[[:space:]]*"comments"[[:space:]]*:[[:space:]]*\{"nodes"[[:space:]]*:[[:space:]]*\[[^]]*\]' || true)
+  done < <(grep -oE '\{"isResolved"[[:space:]]*:[[:space:]]*false[[:space:]]*,[[:space:]]*"comments"[[:space:]]*:[[:space:]]*\{"nodes"[[:space:]]*:[[:space:]]*\[[^]]*\]' <<<"${threads_part}" || true)
 }
 gh_api_review_fingerprint() {
   local raw="${1}" matches="" decision=""
@@ -651,13 +656,12 @@ gh_api_review_fingerprint() {
   # must not look like new reviewer input, so drop the isResolved tokens. The
   # thread's comments still hash, which keeps a later resolution from
   # changing the fingerprint (no spurious round).
-  matches="$(printf '%s' "${raw}" | grep -oE '\{"state":"[^"]*","body":"[^"]*","author":\{"login":"[^"]*"\}|\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*"' | grep -v '\[bot\]' || true)"
+  matches="$(grep -oE '\{"state":"[^"]*","body":"[^"]*","author":\{"login":"[^"]*"\}|\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*"' <<<"${raw}" | grep -v '\[bot\]' || true)"
   if [[ -z "${matches}" ]]; then
     # Only a decision that means "do work now" counts as feedback on its own;
     # REVIEW_REQUIRED / empty just mean "waiting for reviewers".
     decision="$(gh_api_json_str "${raw}" "reviewDecision")"
     if [[ "${decision}" != "CHANGES_REQUESTED" && "${decision}" != "COMMENTED" ]]; then
-      printf '%s\n' ""
       return 0
     fi
   fi
@@ -710,7 +714,7 @@ gh_api_installation_repo_access() {
       printf 'unknown\n'
       return 0
     fi
-    if printf '%s' "${json}" | grep -Fq "\"${full}\""; then
+    if grep -Fq "\"${full}\"" <<<"${json}"; then
       printf 'yes\n'
       return 0
     fi
@@ -881,11 +885,9 @@ gh_api_requested_reviewers() {
   # already recorded a request on and the driver kept dying on the hand-off
   # (issue #136: PR #687 carried reviewRequests=[conahcnuj] and the run still
   # exited 1 with "could not request review").
-  logins="$(printf '%s' "${json}" |
-    grep -oE '"login"[[:space:]]*:[[:space:]]*"[^"]*"' |
+  logins="$(grep -oE '"login"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${json}" |
     sed 's/^"login"[[:space:]]*:[[:space:]]*"//; s/"$//' || true)"
-  teams="$(printf '%s' "${json}" |
-    grep -oE '"slug"[[:space:]]*:[[:space:]]*"[^"]*"' |
+  teams="$(grep -oE '"slug"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${json}" |
     sed 's/^"slug"[[:space:]]*:[[:space:]]*"//; s/"$//; s/^/team:/' || true)"
   [[ -n "${logins}" ]] && printf '%s\n' "${logins}"
   [[ -n "${teams}" ]] && printf '%s\n' "${teams}"
@@ -903,8 +905,7 @@ gh_api_repo_admins() {
   else
     json="$(gh_api_call GET "https://api.github.com/repos/${owner}/${repo}/collaborators?permission=admin")" || return 1
   fi
-  printf '%s' "${json}" |
-    grep -oE '"login"[[:space:]]*:[[:space:]]*"[^"]*"' |
+  grep -oE '"login"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${json}" |
     sed 's/^"login"[[:space:]]*:[[:space:]]*"//; s/"$//' || true
 }
 
@@ -926,7 +927,7 @@ gh_api_labels_json() {
   local out="["
   local first=1 p
   for p in "${parts[@]}"; do
-    p="$(printf '%s' "${p}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    p="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<<"${p}")"
     [[ -z "${p}" ]] && continue
     if [[ "${first}" == "1" ]]; then
       first=0

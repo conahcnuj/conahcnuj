@@ -1,0 +1,1 @@
+fix: eliminate broken-pipe write errors in lib/gh-api.sh
