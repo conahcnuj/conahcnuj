@@ -1812,13 +1812,8 @@ drive() {
     # real PR. Only the driver lifts the draft, never the agent, and only once
     # the branch head has no unfinished task line. An empty file is done but
     # must not land on main, so remove it before the hand-off.
-    remove_empty_todo
-
-    if [[ "${pr_draft}" == "true" ]]; then
-      echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
-      gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
-      pr_draft="false"
-    fi
+    # Ready declaration and empty-TODO removal are deferred until the
+    # non-reviewer constraints actually pass (see the constraints phase).
 
     # --- review feedback phase ---
     # Address the review feedback (open threads / requested changes) BEFORE
@@ -1890,6 +1885,14 @@ ${summary}"
       if ! poll_conditions "${owner}" "${repo}" "${pr}" "${base}"; then
         echo "Constraints failing after addressing feedback; fixing next cycle." >&2
         continue
+      fi
+      # The feedback work has passed the constraints: make sure the (already
+      # ready) PR's progress file is gone and the ready state holds.
+      remove_empty_todo
+      if [[ "${pr_draft}" == "true" ]]; then
+        echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
+        gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
+        pr_draft="false"
       fi
       request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
       log_review_handoff "${owner}" "${repo}" "${pr}" "${REVIEWER:-${owner}}"
@@ -1971,6 +1974,17 @@ ${summary}"
 
     conflict_fix_pushed="false"
     echo "PR #${pr}: non-reviewer constraints satisfied." >&2
+    # The constraints pass, so the issue is actually done now: drop the empty
+    # progress file and mark the PR ready before handing it over. Doing this
+    # only here (never before the constraints pass) keeps a PR that still needs
+    # work from being declared ready, and keeps work from running after the
+    # ready declaration.
+    remove_empty_todo
+    if [[ "${pr_draft}" == "true" ]]; then
+      echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
+      gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
+      pr_draft="false"
+    fi
     # The constraints pass, so the PR is ready for a human: hand it over. The
     # run does not end here; the next loop iteration waits for the verdict.
     request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
