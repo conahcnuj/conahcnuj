@@ -1478,6 +1478,21 @@ poll_conditions() {
       # knows the merge has conflicts, even when mergeable is not CONFLICTING
       # yet.
       if [[ "${mergeable}" == "CONFLICTING" || "${mss}" == "DIRTY" ]]; then
+        # GitHub recomputes mergeability asynchronously after a push, so a
+        # branch that already contains its base can still be reported as
+        # CONFLICTING/DIRTY for a while. Treating that as a real conflict
+        # sends the agent into another implement round that finds nothing to
+        # merge and burns the time budget (issue #932). When the base is
+        # already an ancestor of HEAD locally, there is no conflict to fix:
+        # poll and wait for GitHub to catch up instead.
+        if [[ -n "${base}" ]] && git remote get-url origin >/dev/null 2>&1; then
+          git fetch origin "${base}" >/dev/null 2>&1 || true
+          if git rev-parse --verify "origin/${base}" >/dev/null 2>&1 && git merge-base --is-ancestor "origin/${base}" HEAD 2>/dev/null; then
+            echo "PR #${pr}: base branch '${base}' already merged locally; waiting for GitHub to recompute mergeability." >&2
+            rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
+            continue
+          fi
+        fi
         CONSTRAINT_FAILURE="conflict"
         echo "PR #${pr} has a merge conflict with its base branch (mergeable=${mergeable} mergeState=${mss}); the branch must be merged with the base and the conflicts resolved." >&2
       else
@@ -1847,7 +1862,7 @@ ${summary}"
       # the fix restarted CI, so the reviewer is only asked once the checks are
       # green again (and the branch still merges), exactly as on the first
       # hand-off.
-      if ! poll_conditions "${owner}" "${repo}" "${pr}"; then
+      if ! poll_conditions "${owner}" "${repo}" "${pr}" "${base}"; then
         echo "Constraints failing after addressing feedback; fixing next cycle." >&2
         continue
       fi
@@ -1882,7 +1897,7 @@ ${summary}"
     # break. Whatever fails is fixed and the constraints are re-verified, so
     # the hand-off only happens on a PR that is actually ready. A merged or
     # closed PR ends the run inside poll_conditions itself.
-    if ! poll_conditions "${owner}" "${repo}" "${pr}"; then
+    if ! poll_conditions "${owner}" "${repo}" "${pr}" "${base}"; then
       # CI failed or the branch conflicts: implement again with that context.
       # A conflict gets its own instruction (merge the base branch and resolve
       # it) instead of the generic CI wording; otherwise models patched around
