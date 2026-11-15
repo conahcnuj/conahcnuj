@@ -524,32 +524,59 @@ gh_api_fetch_reviews() {
 # review/comment bodies are noise that confuse the agent, so they are dropped
 # here. The fingerprint still uses the full payload to detect new feedback.
 gh_api_review_summary() {
-  local json decision
-  json="$(gh_api_read_line)"
+  local json
+  json="$(cat)"
 
+  if command -v node >/dev/null 2>&1; then
+    printf '%s' "${json}" | node -e '
+      let data = "";
+      process.stdin.on("data", c => data += c);
+      process.stdin.on("end", () => {
+        try {
+          const obj = JSON.parse(data);
+          const pr = (obj && obj.data && obj.data.repository && obj.data.repository.pullRequest) || {};
+          const decision = pr.reviewDecision;
+          console.log("reviewDecision: " + (decision == null ? "NONE" : decision));
+          const threads = (pr.reviewThreads && pr.reviewThreads.nodes) || [];
+          const unresolved = threads.filter(t => !t.isResolved);
+          if (unresolved.length > 0) console.log("REVIEW THREADS (unresolved):");
+          for (const t of unresolved) {
+            const comments = (t.comments && t.comments.nodes) || [];
+            for (const c of comments) {
+              const id = c.databaseId;
+              const author = (c.author && c.author.login) || "unknown";
+              let body = c.body;
+              if (body === undefined || body === null || body === "") body = "(no body)";
+
+              const esc = JSON.stringify(String(body)).slice(1, -1);
+              if (id !== undefined && id !== null) {
+                console.log("- [comment " + id + " by " + author + "] " + esc);
+              } else {
+                console.log("- " + esc);
+              }
+            }
+          }
+        } catch (e) {
+        }
+      });
+    '
+    return 0
+  fi
+
+  local decision
   decision="$(gh_api_json_str "${json}" "reviewDecision")"
   printf 'reviewDecision: %s\n' "${decision:-NONE}"
 
-  # Inline review threads: pass only the unresolved ones.
   local threads_part
-  threads_part="$(printf '%s' "${json}" | sed -n 's/.*"reviewThreads":{"nodes":\(.*\)/\1/p')"
-  if echo "${threads_part}" | grep -q '"isResolved":false'; then
+  threads_part="$(printf '%s' "${json}" | sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p')"
+  if printf '%s' "${threads_part}" | grep -q '"isResolved"[[:space:]]*:[[:space:]]*false'; then
     echo "REVIEW THREADS (unresolved):"
   fi
   gh_api_format_unresolved_threads "${json}"
 }
-
-# Unresolved inline review threads from a raw reviews payload (stdin).
-# Output: one "- [comment <id> by <author>] <body>" line per comment of an
-# unresolved thread, nothing when every thread is resolved (or there are none).
-# The comment id is what a reply is posted against (the agent answers the
-# reviewer in-thread; see the feedback round in bin/conahcnuj.sh), so the
-# summary names it. Split out so the initial context of a run can quote the
-# feedback that is still open without dragging the rest of the review state
-# along; collect_initial_context in bin/conahcnuj.sh is the caller.
 gh_api_unresolved_threads() {
   local json
-  json="$(gh_api_read_line)"
+  json="$(cat)"
   gh_api_format_unresolved_threads "${json}"
 }
 
@@ -557,8 +584,42 @@ gh_api_unresolved_threads() {
 # print every comment with the numeric id a reply would target. Comments that
 # carry no id (an older/parsed-down payload) still print their body.
 gh_api_format_unresolved_threads() {
-  local json="${1}" threads_part tn
-  threads_part="$(printf '%s' "${json}" | sed -n 's/.*"reviewThreads":{"nodes":\(.*\)/\1/p')"
+  local json="${1}"
+  if command -v node >/dev/null 2>&1; then
+    printf '%s' "${json}" | node -e '
+      let data = "";
+      process.stdin.on("data", c => data += c);
+      process.stdin.on("end", () => {
+        try {
+          const obj = JSON.parse(data);
+          const pr = (((obj || {}).data || {}).repository || {}).pullRequest || {};
+          const nodes = (pr.reviewThreads && pr.reviewThreads.nodes) || [];
+          for (const t of nodes) {
+            if (t.isResolved) continue;
+            const comments = (t.comments && t.comments.nodes) || [];
+            for (const c of comments) {
+              const id = c.databaseId;
+              const author = (c.author && c.author.login) || "unknown";
+              let body = c.body;
+              if (body === undefined || body === null || body === "") body = "(no body)";
+              const esc = JSON.stringify(String(body)).slice(1, -1);
+              if (id !== undefined && id !== null) {
+                console.log("- [comment " + id + " by " + author + "] " + esc);
+              } else {
+                console.log("- " + esc);
+              }
+            }
+          }
+        } catch (e) {
+        }
+      });
+    '
+    return 0
+  fi
+
+  local threads_part tn
+  threads_part="$(printf '%s' "${json}" | sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p')"
+
   while IFS= read -r tn; do
     [[ -z "${tn}" ]] && continue
     local cn cid ca cb printed="false"
@@ -574,7 +635,7 @@ gh_api_format_unresolved_threads() {
       else
         printf -- '- %s\n' "${cb}"
       fi
-    done < <(printf '%s' "${tn}" | grep -oE '\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}' || true)
+    done < <(printf '%s' "${tn}" | grep -oE '\{[[:space:]]*"databaseId"[[:space:]]*:[[:space:]]*[0-9]+[[:space:]]*,[[:space:]]*"body"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*,[[:space:]]*"author"[[:space:]]*:[[:space:]]*\{[[:space:]]*"login"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*\}[[:space:]]*\}' || true)
     if [[ "${printed}" != "true" ]]; then
       local bn
       while IFS= read -r bn; do
@@ -582,16 +643,8 @@ gh_api_format_unresolved_threads() {
         printf -- '- %s\n' "${bn}"
       done < <(printf '%s' "${tn}" | grep -oE '"body":"[^"]*"' | sed 's/"body":"//; s/"$//' || true)
     fi
-  done < <(printf '%s' "${threads_part}" | grep -oE '\{"isResolved":false,"comments":\{"nodes":\[[^]]*\]' || true)
+  done < <(printf '%s' "${threads_part}" | grep -oE '\{"isResolved"[[:space:]]*:[[:space:]]*false[[:space:]]*,[[:space:]]*"comments"[[:space:]]*:[[:space:]]*\{"nodes"[[:space:]]*:[[:space:]]*\[[^]]*\]' || true)
 }
-
-# Fingerprint of the actionable review feedback in a raw reviews payload.
-# Returns empty when there is no reviewer feedback to act on, so a poll of the
-# initial "waiting for review" state (reviewDecision=REVIEW_REQUIRED or empty,
-# no reviews/comments/threads) is never mistaken for fresh feedback.
-# Comments carry their author, so the bot's own replies are dropped before the
-# hash: they are review comments too, and counting them would let a reply look
-# like fresh reviewer feedback (the driver would answer its own answer forever).
 gh_api_review_fingerprint() {
   local raw="${1}" matches="" decision=""
   # Resolution state itself is not feedback: a thread being marked resolved
