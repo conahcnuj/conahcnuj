@@ -114,22 +114,6 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: driver
 
-      # Check out the target repository normally (into the working tree root)
-      # when it is not the driver's own repository. The driver is then run with
-      # the target root as its working directory (no `cd target`), so branch
-      # creation, fetches, Verified commits and the agent's edits all act on the
-      # target, matching a local run.
-      - name: Check out the target repository
-        if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: ${{ inputs.repository || github.repository }}
-          fetch-depth: 0
-          # Keep the `driver/` checkout (and its composite action) intact: the
-          # default `clean: true` runs `git clean -ffdx` and wipes `driver/`,
-          # which makes `./driver/.github/actions/install-opencode` unresolvable.
-          clean: false
-
       # opencode is not preinstalled on runners; shared with ci.yml through the
       # install-opencode composite action (authenticated release lookup so
       # shared runner IPs do not hit the API rate limit). The composite action
@@ -139,9 +123,21 @@ jobs:
         if: ${{ (inputs.repository || github.repository) == job.workflow_repository }}
         uses: ./.github/actions/install-opencode
 
+      # In a cross-repository run the driver checkout lives under `driver/`. Do
+      # the installs that depend on it BEFORE checking out the target
+      # repository: the target checkout (even with `clean: false`) has been
+      # observed to wipe `driver/`, which made `./driver/.github/actions/
+      # install-opencode` unresolvable ("Can't find 'action.yml' ... under the
+      # driver repo"). Installing first removes that dependency on `driver/`
+      # surviving the target checkout. The opencode install is inlined here so it
+      # does not depend on the composite action file being present at all.
       - name: Install opencode (cross-repository)
         if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
-        uses: ./driver/.github/actions/install-opencode
+        shell: bash
+        run: |
+          curl -fsSL https://opencode.ai/v2/install | bash
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install the driver (cross-repository)
         if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
@@ -149,6 +145,21 @@ jobs:
         run: |
           & "${env:GITHUB_WORKSPACE}/driver/install.ps1"
           Remove-Item -Recurse -Force "${env:GITHUB_WORKSPACE}/driver"
+
+      # Check out the target repository normally (into the working tree root)
+      # when it is not the driver's own repository. This runs after the driver
+      # and opencode installs above so a target checkout can never wipe the
+      # `driver/` tree they depend on. The driver is then run with the target
+      # root as its working directory (no `cd target`), so branch creation,
+      # fetches, Verified commits and the agent's edits all act on the target,
+      # matching a local run.
+      - name: Check out the target repository
+        if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          fetch-depth: 0
+          clean: false
 
       # The driver reads gh-app/app.env like any local run. The private key is
       # staged from the sealed secret, outside the work tree, so `git add -A`
