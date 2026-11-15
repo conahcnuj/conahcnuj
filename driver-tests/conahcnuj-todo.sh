@@ -80,8 +80,8 @@ git -C "${WORK}" commit -qm init
 # One JSON document per GitHub API call, in call order:
 #   fetch_issue, get_repo, find_pr_by_head_any (empty), find_pr_by_head (empty),
 #   create_pr repo-id lookup, create_pr (123) as a draft,
-#   body sync PATCH (first loop), fetch_reviews (nothing to act on, REVIEW_REQUIRED),
-#   conditions (SUCCESS), ready_for_review (TODO.jsonl clean), request_review,
+#   body sync PATCH (second loop), ready_for_review (TODO.jsonl clean),
+#   fetch_reviews (nothing to act on), conditions (SUCCESS), request_review,
 #   fetch_reviews (APPROVED -> the run ends on the approval, not the request).
 TAPE="${ROOT}/tape.txt"
 cat > "${TAPE}" <<'EOF'
@@ -93,10 +93,10 @@ cat > "${TAPE}" <<'EOF'
 {"data":{"repository":{"id":"R_kgDOXmplR3p"}}}
 {"data":{"createPullRequest":{"pullRequest":{"number":123}}}}
 {}
-{"data":{"repository":{"pullRequest":{"reviewDecision":"REVIEW_REQUIRED","reviews":{"nodes":[]},"comments":{"nodes":[]},"reviewThreads":{"nodes":[]}}}}}
-{"data":{"repository":{"pullRequest":{"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"SUCCESS"}}}]}}}}}
 {"data":{"repository":{"pullRequest":{"id":"PR_x"}}}}
 {}
+{"data":{"repository":{"pullRequest":{"reviewDecision":"REVIEW_REQUIRED","reviews":{"nodes":[]},"comments":{"nodes":[]},"reviewThreads":{"nodes":[]}}}}}
+{"data":{"repository":{"pullRequest":{"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"SUCCESS"}}}]}}}}}
 {}
 {"data":{"repository":{"pullRequest":{"reviewDecision":"APPROVED","reviews":{"nodes":[{"state":"APPROVED","body":"LGTM","author":{"login":"conahcnuj"}}]},"comments":{"nodes":[]},"reviewThreads":{"nodes":[]}}}}}
 EOF
@@ -110,6 +110,7 @@ export MOCK_OPENCODE_MODELS="opencode/a"
 export MOCK_OPENCODE_TODO="opencode/a"
 export MOCK_OPENCODE_STATE_DIR="${ROOT}/state"
 export CONAHCNUJ_REPO="conahcnuj/conahcnuj"
+unset GITHUB_ACTIONS CONAHCNUJ_GITHUB_ACTIONS CONAHCNUJ_CI
 unset CONAHCNUJ_COMMIT_MODEL CONAHCNUJ_MODEL_LABEL_FILE CONAHCNUJ_SESSION_MODEL \
   CONAHCNUJ_RUN_TIMEOUT_SECONDS OPENCODE_LAST_MODEL
 
