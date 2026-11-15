@@ -46,6 +46,18 @@ if [[ "${1:-}" == "--print-pem-path" ]]; then
   exit 0
 fi
 
+# Fail fast on a missing/empty/non-numeric installation id, even when a
+# cached token is present: an empty id must never reach the token endpoint.
+INSTALLATION_ID="${INSTALLATION_ID:-}"
+if [[ -z "${INSTALLATION_ID}" ]]; then
+  echo "ERROR: INSTALLATION_ID is not set or empty / invalid (do not pass an empty installation id; must be a numeric installation id, digits only; Invalid INSTALLATION_ID; see gh-app/app.env or app.env.example)." >&2
+  exit 1
+fi
+if [[ ! "${INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: INSTALLATION_ID is not set or empty / invalid (do not pass an empty installation id; must be a numeric installation id, digits only; Invalid INSTALLATION_ID; see gh-app/app.env or app.env.example)." >&2
+  exit 1
+fi
+
 # Return cached token if still valid (installation tokens live ~1h).
 # --print-jwt never takes this path: the cache holds installation tokens,
 # not App JWTs.
