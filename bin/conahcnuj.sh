@@ -1226,6 +1226,9 @@ implement() {
   local dead_providers="" quota_providers="" failed_rounds=0 env_failed_rounds=0 quota_failed_rounds=0 ran_without_failure=0
   local model_list known_skipped=""
   local base_branch="${4:-}"
+  local prompt_override="${5:-}"
+  local reply_round="false"
+  [[ -n "${prompt_override}" ]] && reply_round="true"
   ENVIRONMENT_DOWN="0"
   workdir="$(pwd)"
   echo "Implementing with available models..." >&2
@@ -1277,7 +1280,7 @@ implement() {
       fi
       run_failed="false"
       head_before="$(git -C "${workdir}" rev-parse HEAD 2>/dev/null || true)"
-      if ! CONAHCNUJ_RUN_TIMEOUT_SECONDS="${run_timeout}" opencode_run "${title}" "${body}" "${workdir}" "${model}" "${extra}" "${OPENCODE_SESSION_ID}" "${previous_model}" "${COLLECTED_CONTEXT}"; then
+      if ! CONAHCNUJ_RUN_TIMEOUT_SECONDS="${run_timeout}" opencode_run "${title}" "${body}" "${workdir}" "${model}" "${extra}" "${OPENCODE_SESSION_ID}" "${previous_model}" "${COLLECTED_CONTEXT}" "${prompt_override}"; then
         run_failed="true"
       fi
       OPENCODE_USED_MODELS="${OPENCODE_USED_MODELS}${model} "
@@ -1356,6 +1359,12 @@ implement() {
   if [[ "${failed_rounds}" -gt 0 && "$((env_failed_rounds + quota_failed_rounds))" -eq "${failed_rounds}" ]]; then
     ENVIRONMENT_DOWN="1"
     echo "ERROR: every model round died on an environment error (provider unreachable, credentials rejected, or quota/billing exhausted; providers given up on:${dead_providers}${quota_providers}). Nothing the driver can do about that -- re-run it once its providers are usable again." >&2
+  fi
+  # A reply round only posts review-thread replies; it may leave the tree
+  # untouched and write no .commit-msg, which is still a complete round as
+  # long as at least one model ran without an error.
+  if [[ "${reply_round}" == "true" && "${ran_without_failure}" -gt 0 ]]; then
+    return 0
   fi
   return 1
 }
@@ -1707,6 +1716,7 @@ drive() {
   # asks again until new review feedback makes it work a fresh round: the job is
   # to take the PR to the owner's approval, not to stop at the request.
   local handed_off="false"
+  local reply_pending="false"
 
   while true; do
     # The budget expired. Once the PR is with the reviewer, that is simply a
@@ -1860,6 +1870,7 @@ drive() {
       # then the driver must keep driving rather than wait.
       handed_off="false"
       conflict_fix_pushed="false"
+      reply_pending="true"
       echo "New review feedback detected; addressing it." >&2
       # The coding agent answers the reviewer in the thread itself (the reply
       # endpoint and every thread comment id are in the summary), besides any
@@ -1867,7 +1878,7 @@ drive() {
       # "Addressed the review feedback" comment: the in-thread replies are how
       # the reviewer learns what happened. Because the fingerprint drops
       # bot-authored comments, those replies never look like fresh feedback.
-      local code_help="Address the pull request review feedback. Make the code changes, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Then reply in each unresolved review thread below (comment), saying what you changed or answering the question. Post the reply with the GitHub API (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies is the reply endpoint; \${GH_TOKEN} is set) using the comment id shown for each thread. Do not request review yourself (the driver does that after the checks pass).
+      local code_help="Address the pull request review feedback. Make the code changes, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
 
 ${summary}"
       if ! implement "${title}" "${body}" "${code_help}" "${base}"; then
@@ -1886,11 +1897,23 @@ ${summary}"
       # Verify the non-reviewer constraints again before handing the PR back:
       # the fix restarted CI, so the reviewer is only asked once the checks are
       # green again (and the branch still merges), exactly as on the first
-      # hand-off.
+      # hand-off. Conflicts make CI status unreliable, so the reply (the
+      # comment) is deferred until this passes.
       if ! poll_conditions "${owner}" "${repo}" "${pr}" "${base}"; then
         echo "Constraints failing after addressing feedback; fixing next cycle." >&2
         continue
       fi
+      # Checks pass and the branch merges: now it is safe to reply in the
+      # review threads (push -> CI -> comment -> request review). The reply
+      # round uses a prompt override so the thread ids reach the model.
+      local reply_prompt="The pull request branch has been updated and every check passes with no merge conflict. Reply in each unresolved review thread below, saying what you changed or answering the question. Post the reply with the GitHub API (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies is the reply endpoint; \${GH_TOKEN} is set) using the comment id shown for each thread. Do not make code changes, do not commit, and do not request review.
+
+${summary}"
+      if ! implement "${title}" "${body}" "" "${base}" "${reply_prompt}"; then
+        echo "No thread reply was posted for this feedback; continuing." >&2
+      fi
+      rm -f .commit-msg
+      reply_pending="false"
       request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
       log_review_handoff "${owner}" "${repo}" "${pr}" "${REVIEWER:-${owner}}"
       if [[ "${CI_MODE}" == "true" ]]; then
@@ -1971,6 +1994,20 @@ ${summary}"
 
     conflict_fix_pushed="false"
     echo "PR #${pr}: non-reviewer constraints satisfied." >&2
+    # If a feedback round's reply was deferred (its first poll failed on a
+    # conflict or a CI failure), post it now that the branch is green and
+    # conflict-free, before handing the PR back (push -> CI -> comment ->
+    # request review).
+    if [[ "${reply_pending}" == "true" ]]; then
+      local reply_prompt="The pull request branch has been updated and every check passes with no merge conflict. Reply in each unresolved review thread below, saying what you changed or answering the question. Post the reply with the GitHub API (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies is the reply endpoint; \${GH_TOKEN} is set) using the comment id shown for each thread. Do not make code changes, do not commit, and do not request review.
+
+${summary}"
+      if ! implement "${title}" "${body}" "" "${base}" "${reply_prompt}"; then
+        echo "No thread reply was posted for this feedback; continuing." >&2
+      fi
+      rm -f .commit-msg
+      reply_pending="false"
+    fi
     # The constraints pass, so the PR is ready for a human: hand it over. The
     # run does not end here; the next loop iteration waits for the verdict.
     request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
