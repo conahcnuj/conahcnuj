@@ -141,12 +141,10 @@ jobs:
 
       - name: Install the driver (cross-repository)
         if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass \
-            -File "${GITHUB_WORKSPACE}/driver/install.ps1"
-          rm -rf "${GITHUB_WORKSPACE}/driver"
+          & "${env:GITHUB_WORKSPACE}/driver/install.ps1"
+          Remove-Item -Recurse -Force "${env:GITHUB_WORKSPACE}/driver"
 
       # The driver reads gh-app/app.env like any local run. The private key is
       # staged from the sealed secret, outside the work tree, so `git add -A`
