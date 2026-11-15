@@ -120,8 +120,11 @@ extract_events() {
       }
       if (index(line, "Model ") > 0) {
         rest = after(line, "Model ")
-        if (index(rest, " completed the work.") > 0) {
-          print "model_done\t" trimmed(before(rest, " completed the work."))
+        # The driver prints both "completed the work." and
+        # "completed the work and committed it."; count either as a completed
+        # round instead of only the bare form.
+        if (index(rest, " completed the work") > 0) {
+          print "model_done\t" trimmed(before(rest, " completed the work"))
           next
         }
         if (index(rest, " failed before completing the work: environment error") > 0) {
@@ -151,7 +154,7 @@ extract_events() {
       if (index(line, "is merged while waiting") > 0 || index(line, "is already merged. Nothing to do.") > 0) print "merged"
       if (index(line, "is closed without merge") > 0) print "closed"
       if (index(line, "the PR could not be read back either") > 0) print "handoff_unconfirmed"
-      if (index(line, "every model round died on an environment error") > 0) print "env_down"
+      if (index(line, "every model round died on an environment error") > 0 && index(line, "echo") == 0) print "env_down"
       if (index(line, "ERROR: no available model completed the work") > 0) print "no_model"
       if (index(line, "exhausted while waiting. Exiting.") > 0) print "budget_exhausted"
       if (index(line, "opencode exceeded the remaining driver time budget") > 0) print "budget_stop"

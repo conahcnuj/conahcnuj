@@ -1897,6 +1897,10 @@ ${summary}"
       if [[ "${CONSTRAINT_FAILURE}" == "conflict" && "${conflict_fix_pushed}" == "true" ]]; then
         echo "PR #${pr}: conflict fix already pushed; waiting for GitHub to recompute mergeability." >&2
         rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
+        # One wait is enough to let GitHub recompute; if it still reports a
+        # conflict afterwards the fix did not take, so drop the flag and let
+        # the next iteration try again instead of waiting forever (#932).
+        conflict_fix_pushed="false"
         continue
       fi
       local produced_change="false" fix_context
