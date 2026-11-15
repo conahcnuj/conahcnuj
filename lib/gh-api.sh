@@ -24,14 +24,14 @@ GH_APP_DIR="${GH_APP_DIR:-${HERE}/../gh-app}"
 # `printf '%s' "$x" | gh_api_unb64` work under `shopt -u nounset`-safe use).
 gh_api_b64() {
   if [[ $# -ge 1 ]]; then
-    printf '%s' "${1}" | base64 | tr -d '\n'
+    printf '%s' "${1}" 2>/dev/null | base64 | tr -d '\n' || true
   else
     base64 | tr -d '\n'
   fi
 }
 gh_api_unb64() {
   if [[ $# -ge 1 ]]; then
-    printf '%s' "${1}" | base64 -d 2>/dev/null || true
+    printf '%s' "${1}" 2>/dev/null | base64 -d 2>/dev/null || true
   else
     base64 -d 2>/dev/null || true
   fi
@@ -451,7 +451,7 @@ gh_api_rollup_state() {
         pending="true"
         ;;
     esac
-  done < <(printf '%s\n' "${contexts}" | sed 's/},{/}\n{/g')
+  done < <(printf '%s\n' "${contexts}" 2>/dev/null | sed 's/},{/}\n{/g' || true)
 
   if [[ "${result}" == "FAILURE" ]]; then
     printf '%s\n' "FAILURE"
@@ -656,7 +656,7 @@ gh_api_review_fingerprint() {
   # must not look like new reviewer input, so drop the isResolved tokens. The
   # thread's comments still hash, which keeps a later resolution from
   # changing the fingerprint (no spurious round).
-  matches="$(grep -oE '\{"state":"[^"]*","body":"[^"]*","author":\{"login":"[^"]*"\}|\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*"' <<<"${raw}" | grep -v '\[bot\]' || true)"
+  matches="$(grep -oE '\{"state":"[^"]*","body":"[^"]*","author":\{"login":"[^"]*"\}|\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*"' <<<"${raw}" | grep -vE '"author"[[:space:]]*:[[:space:]]*\{[[:space:]]*"login"[[:space:]]*:[[:space:]]*"[^"]*\[bot\]' || true)"
   if [[ -z "${matches}" ]]; then
     # Only a decision that means "do work now" counts as feedback on its own;
     # REVIEW_REQUIRED / empty just mean "waiting for reviewers".
@@ -665,7 +665,9 @@ gh_api_review_fingerprint() {
       return 0
     fi
   fi
-  printf '%s%s' "${matches}" "${decision}" | sort -u | cksum | cut -d' ' -f1
+  local hash
+  hash="$(printf '%s%s' "${matches}" "${decision}" 2>/dev/null | sort -u | cksum | cut -d' ' -f1 2>/dev/null || true)"
+  printf '%s\n' "${hash}" 2>/dev/null || true
 }
 
 # Find the open PR whose head is <branch>. Output: PR number (empty if none).
@@ -711,25 +713,25 @@ gh_api_installation_repo_access() {
   local page=1 per_page=100 total json
   while :; do
     if ! json="$(gh_api_call GET "${GH_APP_API_BASE:-https://api.github.com}/installation/repositories?per_page=${per_page}&page=${page}")"; then
-      printf 'unknown\n'
+      printf 'unknown\n' 2>/dev/null || true
       return 0
     fi
     if grep -Fq "\"${full}\"" <<<"${json}"; then
-      printf 'yes\n'
+      printf 'yes\n' 2>/dev/null || true
       return 0
     fi
     total="$(gh_api_json_num "${json}" "total_count")"
     if [[ -z "${total}" ]]; then
-      printf 'unknown\n'
+      printf 'unknown\n' 2>/dev/null || true
       return 0
     fi
     if (( page * per_page >= total )); then
-      printf 'no\n'
+      printf 'no\n' 2>/dev/null || true
       return 0
     fi
     page=$((page + 1))
     if (( page > 100 )); then
-      printf 'unknown\n'
+      printf 'unknown\n' 2>/dev/null || true
       return 0
     fi
   done
