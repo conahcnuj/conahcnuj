@@ -56,7 +56,7 @@
 #                            (default: WARN; DEBUG to debug a failing model)
 #   CONAHCNUJ_CONTEXT_FILES  space-separated checkout files whose contents are
 #                            collected into the prompt alongside the issue
-#                            (default: README.md AGENTS.md; empty sends none)
+#                            (default: empty; sends none unless listed)
 #   CONAHCNUJ_RATE_LIMIT_WATCH_SECONDS  poll interval of the rate-limit
 #                            watchdog that stops a round when the provider
 #                            reports a rate limit (default: 1 s)
@@ -1098,8 +1098,8 @@ resolve_agent_branch_name() {
 # Gather the material the first model round would otherwise have to look up
 # itself, so a run starts from what is already known: the review threads a
 # resumed PR still has open, and the orientation files of the checkout
-# (README.md / AGENTS.md by default; CONAHCNUJ_CONTEXT_FILES takes a
-# space-separated list, an explicitly empty value sends no files). Only
+# (CONAHCNUJ_CONTEXT_FILES takes a space-separated list; an empty or unset
+# value sends no files). Only
 # deterministically collectable information goes in - the prompt labels it
 # Collected context and shows it as data, never as instruction, so the agent
 # contract stays the single paragraph that says how to work. Read after the
@@ -1122,8 +1122,12 @@ ${threads}"
 
   local file_list file content
   # No colon in the expansion: an explicitly empty CONAHCNUJ_CONTEXT_FILES
-  # means "collect no files at all", while an unset one keeps the default.
-  file_list="${CONAHCNUJ_CONTEXT_FILES-README.md AGENTS.md}"
+  # means "collect no files at all", and an unset one now also collects no
+  # files by default. Orientation files (README.md / AGENTS.md) are no longer
+  # pulled in wholesale; dumping them into every prompt (and into the run log)
+  # was too much noise, and the agent reads them itself when it needs them.
+  # Opt in with CONAHCNUJ_CONTEXT_FILES="README.md AGENTS.md".
+  file_list="${CONAHCNUJ_CONTEXT_FILES-}"
   while IFS= read -r file; do
     [[ -f "${file}" ]] || continue
     content="$(cat -- "${file}" | sed 's/[[:space:]]*$//')"
@@ -2126,7 +2130,9 @@ main() {
   owner="${repo_info%%/*}"
   repo="${repo_info#*/}"
   BUG_REPORT_TARGET="${repo_info}"
-  echo "Repository: ${owner}/${repo}" >&2
+  # Keep the run log focused on what the agent and the driver actually do; the
+  # target repository is already implied by the invocation and the bug report's
+  # "Issue/PR" line, so announcing it here is just noise.
 
   # The reviewer a run hands the PR to is not always the repository owner: an
   # organisation cannot be assigned as a reviewer ("Reviews may only be requested
