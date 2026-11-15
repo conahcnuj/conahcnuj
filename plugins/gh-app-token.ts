@@ -317,6 +317,16 @@ let cachedAt = 0
 const TOKEN_TTL_MS = 50 * 60 * 1000
 
 async function getInstallationToken(): Promise<string> {
+  const installationId = config.INSTALLATION_ID
+  // Fail fast, even when a cached token is present: an empty/non-numeric
+  // installation id must never be used to mint or reuse a token, mirroring
+  // gh-app/get-token.sh.
+  if (!installationId || !/^\d+$/.test(installationId)) {
+    throw new Error(
+      "Invalid INSTALLATION_ID for token exchange: " +
+        (installationId ?? "")
+    )
+  }
   if (cachedToken && Date.now() - cachedAt < TOKEN_TTL_MS) {
     return cachedToken
   }

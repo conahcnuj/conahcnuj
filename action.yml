@@ -39,6 +39,7 @@ runs:
         set -euo pipefail
         if [[ -z "${APP_ID}" ]]; then echo "::error::Missing app-id input (pass secrets.APP_ID). See Getting started step 3." >&2; exit 1; fi
         if [[ -z "${INSTALLATION_ID}" ]]; then echo "::error::Missing installation-id input (pass secrets.INSTALLATION_ID). See Getting started step 3." >&2; exit 1; fi
+        if [[ ! "${INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then echo "::error::Invalid installation-id input (must be digits only; do not pass an empty installation id). See Getting started step 3." >&2; exit 1; fi
         if [[ -z "${PRIVATE_KEY}" ]]; then echo "::error::Missing private-key input (pass secrets.PRIVATE_KEY). See Getting started step 3." >&2; exit 1; fi
         PEM_PATH="${RUNNER_TEMP}/conahcnuj-app.pem"
         cat > "${PEM_PATH}" <<EOF

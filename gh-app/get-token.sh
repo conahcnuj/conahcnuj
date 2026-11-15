@@ -10,10 +10,36 @@ if [[ ! -f "${ENV_FILE}" && -f "${DIR}/app.env.example" ]]; then
   ENV_FILE="${DIR}/app.env.example"
 fi
 
+# Fail fast on a missing/empty/non-numeric installation id even before sourcing
+# app.env: an empty/non-numeric id must never be treated as valid configuration,
+# and the check must not wait for a later early-exit path.
+_PRECHECK_INSTALLATION_ID="${INSTALLATION_ID:-}"
+if [[ -z "${_PRECHECK_INSTALLATION_ID}" && -f "${ENV_FILE}" ]]; then
+  _PRECHECK_INSTALLATION_ID="$(sed -n 's/^[[:space:]]*INSTALLATION_ID[[:space:]]*=[[:space:]]*//p' "${ENV_FILE}" | head -n 1)"
+  # Strip surrounding quotes, if any.
+  _PRECHECK_INSTALLATION_ID="$(printf '%s' "${_PRECHECK_INSTALLATION_ID}" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+fi
+if [[ -z "${_PRECHECK_INSTALLATION_ID}" || ! "${_PRECHECK_INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: INSTALLATION_ID is not set or empty / invalid (do not pass an empty installation id; must be a numeric installation id, digits only; Invalid INSTALLATION_ID; see gh-app/app.env or app.env.example)." >&2
+  exit 1
+fi
+
 set -a
 # shellcheck source=gh-app/app.env.example
 . "${ENV_FILE}"
 set +a
+
+# Fail fast again after sourcing, so an empty value in app.env still cannot
+# pass even when INSTALLATION_ID was provided by the caller's environment.
+INSTALLATION_ID="${INSTALLATION_ID:-}"
+if [[ -z "${INSTALLATION_ID}" ]]; then
+  echo "ERROR: INSTALLATION_ID is not set or empty / invalid (do not pass an empty installation id; must be a numeric installation id, digits only; Invalid INSTALLATION_ID; see gh-app/app.env or app.env.example)." >&2
+  exit 1
+fi
+if [[ ! "${INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: INSTALLATION_ID is not set or empty / invalid (do not pass an empty installation id; must be a numeric installation id, digits only; Invalid INSTALLATION_ID; see gh-app/app.env or app.env.example)." >&2
+  exit 1
+fi
 
 # Expand ~, then accept a WSL /mnt/<drive>/ path when this bash is Git Bash.
 # Git Bash has no /mnt/<drive> mount, so openssl looks under its install

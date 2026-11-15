@@ -80,6 +80,21 @@ jobs:
       run:
         shell: bash
     steps:
+      # Fail fast on missing/invalid App secrets before spending time on
+      # checkouts and installs: an empty or non-numeric installation id must
+      # never reach the staging step (or the token endpoint).
+      - name: Validate required App secrets
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+          INSTALLATION_ID: ${{ secrets.INSTALLATION_ID }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${APP_ID}" ]]; then echo "::error::Missing APP_ID secret (pass secrets.APP_ID). See Getting started step 3." >&2; exit 1; fi
+          if [[ -z "${INSTALLATION_ID}" ]]; then echo "::error::Missing installation-id (do not pass an empty INSTALLATION_ID; pass secrets.INSTALLATION_ID). See Getting started step 3." >&2; exit 1; fi
+          if [[ ! "${INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then echo "::error::Invalid installation-id (must be digits only; do not pass an empty installation id). See Getting started step 3." >&2; exit 1; fi
+          if [[ -z "${PRIVATE_KEY}" ]]; then echo "::error::Missing PRIVATE_KEY secret (pass secrets.PRIVATE_KEY). See Getting started step 3." >&2; exit 1; fi
+
       # Check out the driver source, i.e. this workflow's own repository: for
       # a cross-repository `workflow_call` the default checkout would be the
       # caller's repository, which has no driver. For this repository's own
@@ -123,6 +138,10 @@ jobs:
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          if [[ -z "${APP_ID}" ]]; then echo "::error::Missing APP_ID secret (pass secrets.APP_ID). See Getting started step 3." >&2; exit 1; fi
+          if [[ -z "${INSTALLATION_ID}" ]]; then echo "::error::Missing installation-id (do not pass an empty INSTALLATION_ID; pass secrets.INSTALLATION_ID). See Getting started step 3." >&2; exit 1; fi
+          if [[ ! "${INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then echo "::error::Invalid installation-id (must be digits only; do not pass an empty installation id). See Getting started step 3." >&2; exit 1; fi
+          if [[ -z "${PRIVATE_KEY}" ]]; then echo "::error::Missing PRIVATE_KEY secret (pass secrets.PRIVATE_KEY). See Getting started step 3." >&2; exit 1; fi
           pem="$RUNNER_TEMP/conahcnuj-app.pem"
           printf '%s\n' "$PRIVATE_KEY" > "$pem"
           chmod 600 "$pem"

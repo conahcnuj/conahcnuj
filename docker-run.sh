@@ -69,7 +69,15 @@ set -a
 . "${HOST_ENV}"
 set +a
 : "${APP_ID:?APP_ID missing from ${HOST_ENV}}"
-: "${INSTALLATION_ID:?INSTALLATION_ID missing from ${HOST_ENV}}"
+INSTALLATION_ID="${INSTALLATION_ID:-}"
+if [[ -z "${INSTALLATION_ID}" ]]; then
+  echo "ERROR: INSTALLATION_ID missing from ${HOST_ENV}" >&2
+  exit 1
+fi
+if [[ ! "${INSTALLATION_ID}" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: INSTALLATION_ID must be a numeric installation id (do not pass an empty installation id)." >&2
+  exit 1
+fi
 : "${APP_SLUG:?APP_SLUG missing from ${HOST_ENV}}"
 : "${PRIVATE_KEY_PATH:?PRIVATE_KEY_PATH missing from ${HOST_ENV}}"
 
