@@ -125,6 +125,10 @@ jobs:
         with:
           repository: ${{ inputs.repository || github.repository }}
           fetch-depth: 0
+          # Keep the `driver/` checkout (and its composite action) intact: the
+          # default `clean: true` runs `git clean -ffdx` and wipes `driver/`,
+          # which makes `./driver/.github/actions/install-opencode` unresolvable.
+          clean: false
 
       # opencode is not preinstalled on runners; shared with ci.yml through the
       # install-opencode composite action (authenticated release lookup so
