@@ -1909,8 +1909,11 @@ ${summary}"
       remove_empty_todo
       if [[ "${pr_draft}" == "true" ]]; then
         echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
-        gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
-        pr_draft="false"
+        if gh_api_ready_pr "${owner}" "${repo}" "${pr}"; then
+          pr_draft="false"
+        else
+          echo "WARNING: could not mark PR #${pr} ready for review; leaving it as a draft." >&2
+        fi
       fi
       request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
       log_review_handoff "${owner}" "${repo}" "${pr}" "${REVIEWER:-${owner}}"
@@ -2008,8 +2011,11 @@ ${summary}"
     remove_empty_todo
     if [[ "${pr_draft}" == "true" ]]; then
       echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
-      gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
-      pr_draft="false"
+      if gh_api_ready_pr "${owner}" "${repo}" "${pr}"; then
+        pr_draft="false"
+      else
+        echo "WARNING: could not mark PR #${pr} ready for review; leaving it as a draft." >&2
+      fi
     fi
     # The constraints pass, so the PR is ready for a human: hand it over. The
     # run does not end here; the next loop iteration waits for the verdict.
