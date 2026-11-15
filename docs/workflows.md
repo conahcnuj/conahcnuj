@@ -183,8 +183,19 @@ jobs:
 
 利用側リポジトリへコピーして使うテンプレートを
 `.github/workflow-templates/` に用意しています（`auto-drive.yml` /
-`auto-merge.yml`）。コピー先は `.github/workflows/` です。GitHub の
-「New workflow」画面から選んで配置することもできます。
+`auto-merge.yml`）。コピー先は `.github/workflows/` です。conahcnuj リポジトリ
+自身の「New workflow」画面ではこれらのテンプレートを選んで配置できますが、
+別リポジトリ（別アカウント・別 Organization）では自動では表示されないため、
+その場合はテンプレートファイルを `.github/workflows/` へコピーしてください。
+例:
+
+```sh
+mkdir -p .github/workflows
+curl -fsSL https://raw.githubusercontent.com/conahcnuj/conahcnuj/main/.github/workflow-templates/auto-drive.yml \
+  -o .github/workflows/auto-drive.yml
+curl -fsSL https://raw.githubusercontent.com/conahcnuj/conahcnuj/main/.github/workflow-templates/auto-merge.yml \
+  -o .github/workflows/auto-merge.yml
+```
 
 - `auto-drive.yml`: `issue-driver.yml` を呼び出し、issue を PR まで駆動する
 - `auto-merge.yml`: `owner-approved-auto-merge.yml` を呼び出し、owner の approve を
