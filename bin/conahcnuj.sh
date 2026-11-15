@@ -1655,6 +1655,7 @@ resolve_reviewer() {
 drive() {
   local owner="${1}" repo="${2}" pr="${3}" branch="${4}" base="${5}" title="${6}" body="${7}" closes="${8}" initial_draft="${9:-false}"
   local last_sig=""
+  local conflict_fix_pushed="false"
   # Whether the PR is currently a draft. The driver keeps it in sync with the
   # per-issue TODO.jsonl: a draft while the file has an unfinished task line,
   # marked ready once it has no line (see the TODO.jsonl gate below). A resumed
@@ -1818,6 +1819,7 @@ drive() {
       # asked again once this round's work passes the constraints, and until
       # then the driver must keep driving rather than wait.
       handed_off="false"
+      conflict_fix_pushed="false"
       echo "New review feedback detected; addressing it." >&2
       # The coding agent answers the reviewer in the thread itself (the reply
       # endpoint and every thread comment id are in the summary), besides any
@@ -1888,9 +1890,19 @@ ${summary}"
       # change there is nothing new to push, so back off before re-checking
       # instead of hammering every model in a tight loop (poll_conditions
       # returns immediately on FAILURE).
+      # A conflict fix may already have been pushed while GitHub has not yet
+      # recomputed mergeability for it. Re-running implement in that window
+      # only re-pushes (which resets GitHub's computation again) and burns
+      # another full model round, so poll and wait instead (#932).
+      if [[ "${CONSTRAINT_FAILURE}" == "conflict" && "${conflict_fix_pushed}" == "true" ]]; then
+        echo "PR #${pr}: conflict fix already pushed; waiting for GitHub to recompute mergeability." >&2
+        rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
+        continue
+      fi
       local produced_change="false" fix_context
       if [[ "${CONSTRAINT_FAILURE}" == "conflict" ]]; then
         refresh_base_branch "${base}"
+        conflict_fix_pushed="false"
       fi
       fix_context="$(constraint_fix_context "${branch}" "${base}")"
       echo "PR #${pr}: constraints failing (${CONSTRAINT_FAILURE:-unknown}); fixing with a new implementation round." >&2
@@ -1903,6 +1915,9 @@ ${summary}"
         commit_changes
         produced_change="true"
       fi
+      if [[ "${produced_change}" == "true" && "${CONSTRAINT_FAILURE}" == "conflict" ]]; then
+        conflict_fix_pushed="true"
+      fi
       if [[ "${produced_change}" != "true" ]]; then
         echo "No model completed work for the failing constraints; backing off before re-checking." >&2
         rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
@@ -1910,6 +1925,7 @@ ${summary}"
       continue
     fi
 
+    conflict_fix_pushed="false"
     echo "PR #${pr}: non-reviewer constraints satisfied." >&2
     # The constraints pass, so the PR is ready for a human: hand it over. The
     # run does not end here; the next loop iteration waits for the verdict.
