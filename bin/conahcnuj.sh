@@ -1117,7 +1117,7 @@ collect_initial_context() {
     # hidden-conversation hint) as work to do.
     local decision
     decision="$(gh_api_json_str "${raw}" "reviewDecision")"
-    if [[ "${decision}" != "null" ]]; then
+    if [[ "${decision}" != "null" && -n "${decision}" ]]; then
       threads="$(printf '%s' "${raw}" | gh_api_unresolved_threads)"
       if [[ -n "${threads}" ]]; then
         out="Unresolved review threads on PR #${pr}:
@@ -1898,7 +1898,7 @@ drive() {
     # A null review decision means no review has been recorded: there is no
     # reviewer feedback to act on, so it must never be treated as actionable
     # (otherwise the agent gets sent to "address feedback" that does not exist).
-    if [[ "${decision}" != "null" ]]; then
+    if [[ "${decision}" != "null" && -n "${decision}" ]]; then
       case "${decision}" in
         CHANGES_REQUESTED|COMMENTED|REVIEW_REQUIRED|"") actionable="true" ;;
       esac
