@@ -444,7 +444,7 @@ gh_api_rollup_state() {
         fi
         conclusion="$(gh_api_json_str "${node}" "conclusion")"
         case "${conclusion}" in
-          SUCCESS|NEUTRAL) ;;
+          SUCCESS|NEUTRAL|SKIPPED) ;;
           "") pending="true" ;;
           null) pending="true" ;;
           *) result="FAILURE" ;;
