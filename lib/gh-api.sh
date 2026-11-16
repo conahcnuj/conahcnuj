@@ -640,16 +640,16 @@ gh_api_format_unresolved_threads() {
       [[ -n "${cb}" ]] || cb="(no body)"
       printed="true"
       if [[ -n "${cid}" ]]; then
-        printf -- '- [comment %s by %s] %s\n' "${cid}" "${ca:-unknown}" "${cb}" 2>/dev/null || true
+        printf -- '- [comment %s by %s] %s\n' "${cid}" "${ca:-unknown}" "${cb}" 2>/dev/null || break
       else
-        printf -- '- %s\n' "${cb}" 2>/dev/null || true
+        printf -- '- %s\n' "${cb}" 2>/dev/null || break
       fi
     done < <(grep -oE '\{[[:space:]]*"databaseId"[[:space:]]*:[[:space:]]*[0-9]+[[:space:]]*,[[:space:]]*"body"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*,[[:space:]]*"author"[[:space:]]*:[[:space:]]*\{[[:space:]]*"login"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*\}[[:space:]]*\}' <<<"${tn}" || true)
     if [[ "${printed}" != "true" ]]; then
       local bn
       while IFS= read -r bn; do
         [[ -z "${bn}" ]] && continue
-        printf -- '- %s\n' "${bn}" 2>/dev/null || true
+        printf -- '- %s\n' "${bn}" 2>/dev/null || break
       done < <(grep -oE '"body":"[^"]*"' <<<"${tn}" 2>/dev/null | sed 's/"body":"//; s/"$//' 2>/dev/null || true)
     fi
   done < <(grep -oE '\{"isResolved"[[:space:]]*:[[:space:]]*false[[:space:]]*,[[:space:]]*"comments"[[:space:]]*:[[:space:]]*\{"nodes"[[:space:]]*:[[:space:]]*\[[^]]*\]' <<<"${threads_part}" 2>/dev/null || true)
