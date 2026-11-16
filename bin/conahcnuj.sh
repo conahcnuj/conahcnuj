@@ -1892,7 +1892,7 @@ drive() {
       # "Addressed the review feedback" comment: the in-thread replies are how
       # the reviewer learns what happened. Because the fingerprint drops
       # bot-authored comments, those replies never look like fresh feedback.
-      local code_help="Address the pull request review feedback. Make the code changes, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
+      local code_help="Address the pull request review feedback. Record each review feedback item as a task in TODO.jsonl (one JSON line per item) so the work is tracked, make the code changes, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Empty TODO.jsonl once all items are addressed. Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
 
 ${summary}"
       if ! implement "${title}" "${body}" "${code_help}" "${base}"; then
@@ -1908,6 +1908,17 @@ ${summary}"
         commit_changes
       fi
       rm -f .commit-msg
+      # If the feedback round left review items tracked in TODO.jsonl, the issue
+      # is not finished yet: keep the PR a draft and let the TODO.jsonl gate
+      # drive the remaining work instead of handing an unfinished PR back (#948).
+      if todo_present; then
+        echo "Review feedback is tracked in TODO.jsonl; keeping PR #${pr} a draft and continuing the work." >&2
+        if [[ "${pr_draft}" != "true" ]]; then
+          gh_api_convert_pr_to_draft "${owner}" "${repo}" "${pr}" || echo "WARNING: could not convert PR #${pr} to a draft; continuing." >&2
+          pr_draft="true"
+        fi
+        continue
+      fi
       # Verify the non-reviewer constraints again before handing the PR back:
       # the fix restarted CI, so the reviewer is only asked once the checks are
       # green again (and the branch still merges), exactly as on the first
