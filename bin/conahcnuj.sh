@@ -1996,7 +1996,9 @@ ${summary}"
         fi
         continue
       fi
-      # Verify the non-reviewer constraints again before handing the PR back:
+
+
+# Verify the non-reviewer constraints again before handing the PR back:
       # the fix restarted CI, so the reviewer is only asked once the checks are
       # green again (and the branch still merges), exactly as on the first
       # hand-off. Conflicts make CI status unreliable, so the reply (the
