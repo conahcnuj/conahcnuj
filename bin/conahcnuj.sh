@@ -1905,7 +1905,7 @@ drive() {
       local had_todo_before="false" todo_before_content="" seeded_feedback_todo="false"
       if [[ -f TODO.jsonl ]]; then
         had_todo_before="true"
-        todo_before_content="$(cat TODO.jsonl)"
+        todo_before_content="$(base64 < TODO.jsonl 2>/dev/null || true)"
       fi
       local feedback_threads
       feedback_threads="$(printf '%s' "${raw}" | gh_api_unresolved_threads)"
@@ -1979,7 +1979,7 @@ ${summary}"
       # so a failed round leaves no phantom progress file behind (#948, #251).
       if [[ "${committed_this_round}" != "true" && "${seeded_feedback_todo}" == "true" ]]; then
         if [[ "${had_todo_before}" == "true" ]]; then
-          printf '%s' "${todo_before_content}" > TODO.jsonl
+          printf '%s' "${todo_before_content}" | base64 -d > TODO.jsonl 2>/dev/null || printf '%s' "${todo_before_content}" > TODO.jsonl
         else
           rm -f TODO.jsonl
         fi
