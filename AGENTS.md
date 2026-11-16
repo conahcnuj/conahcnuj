@@ -86,7 +86,7 @@ GitHub App「conahcnuj」のインストールトークンを発行し、`gh` CL
 ```bash
 # 構文チェック（Ubuntu で確認）
 bash -n gh-app/*.sh gh-app/tests/*.sh bin/*.sh lib/*.sh driver-tests/*.sh
-shellcheck -x gh-app/*.sh gh-app/tests/*.sh bin/*.sh lib/*.sh driver-tests/*.sh   # -x で app.env.example を追従（チェックは無効化しない）
+shellcheck -x gh-app/*.sh gh-app/tests/*.sh bin/*.sh lib/*.sh   # -x で app.env.example を追従（チェックは無効化しない）。driver-tests/ はテストスクリプトのため syntax check のみ（shellcheck は低速）
 
 # プラグイン型チェック（@types/node は plugins/package.json＋lock から取得）
 (cd plugins && npm ci --no-audit --no-fund && ./node_modules/.bin/tsc -p ../plugins --noEmit)

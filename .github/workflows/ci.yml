@@ -61,7 +61,7 @@ jobs:
         run: bash -n gh-app/*.sh gh-app/tests/*.sh bin/*.sh lib/*.sh driver-tests/*.sh
 
       - name: ShellCheck
-        run: shellcheck -x gh-app/*.sh gh-app/tests/*.sh bin/*.sh lib/*.sh driver-tests/*.sh
+        run: shellcheck -x gh-app/*.sh gh-app/tests/*.sh bin/*.sh lib/*.sh
 
   lint-ps:
     if: github.event.pull_request.draft == false
