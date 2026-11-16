@@ -1912,6 +1912,11 @@ drive() {
       if [[ -n "${feedback_threads}" ]]; then
         # One JSON line per feedback item, so todo_present() keeps the PR a
         # draft until every item is addressed and TODO.jsonl is emptied.
+        # Append to any tasks already tracked in TODO.jsonl instead of
+        # overwriting them, so findings are added as TODO rather than
+        # replacing the prior progress (issue #948).
+        local _feedback_tmp
+        _feedback_tmp="$(mktemp)"
         if command -v node >/dev/null 2>&1; then
           printf '%s\n' "${feedback_threads}" | node -e '
             let data = "";
@@ -1922,14 +1927,20 @@ drive() {
                 process.stdout.write(JSON.stringify({ task: line }) + "\n");
               }
             });
-          ' > TODO.jsonl
+          ' > "${_feedback_tmp}"
         else
-          : > TODO.jsonl
+          : > "${_feedback_tmp}"
           while IFS= read -r _line; do
             [[ -z "${_line}" ]] && continue
-            printf '{"task":%s}\n' "$(printf '%s' "${_line}" | sed 's/\\/\\\\/g; s/"/\\"/g')" >> TODO.jsonl
+            printf '{"task":%s}\n' "$(printf '%s' "${_line}" | sed 's/\\/\\\\/g; s/"/\\"/g')" >> "${_feedback_tmp}"
           done <<< "${feedback_threads}"
         fi
+        if [[ -f TODO.jsonl ]] && [[ -n "$(tr -d '[:space:]' < TODO.jsonl 2>/dev/null)" ]]; then
+          cat "${_feedback_tmp}" >> TODO.jsonl
+        else
+          cat "${_feedback_tmp}" > TODO.jsonl
+        fi
+        rm -f "${_feedback_tmp}"
         seeded_feedback_todo="true"
         echo "Recorded $(grep -c '[^[:space:]]' TODO.jsonl 2>/dev/null || printf 0) review feedback item(s) in TODO.jsonl." >&2
       else
