@@ -1821,7 +1821,7 @@ drive() {
       fi
       echo "TODO.jsonl still has unfinished tasks; keeping PR #${pr} a draft and continuing the work." >&2
       local todo_change="false"
-      if implement "${title}" "${body}" "The per-issue progress file TODO.jsonl is still in the working tree, so the issue is not finished and the pull request is still a draft. Continue the work one task at a time: take the first remaining task in TODO.jsonl, address it, remove its line, commit with \`git vc\`, then stop and let the driver run the next round. Empty TODO.jsonl (remove every line, but do not delete the file; the driver removes the empty file) once all tasks are addressed and the pull request is ready for review." "${base}"; then
+      if implement "${title}" "${body}" "The per-issue progress file TODO.jsonl is still in the working tree, so the issue is not finished and the pull request is still a draft. Continue the work, keep TODO.jsonl current, and empty it (remove every line, but do not delete the file; the driver removes the empty file) once the issue is fully resolved and the pull request is ready for review." "${base}"; then
         todo_change="true"
       fi
       # Same rule as the other rounds: only a dirty tree WITH a .commit-msg is
@@ -1932,6 +1932,13 @@ drive() {
         fi
         seeded_feedback_todo="true"
         echo "Recorded $(grep -c '[^[:space:]]' TODO.jsonl 2>/dev/null || printf 0) review feedback item(s) in TODO.jsonl." >&2
+      elif [[ "${had_todo_before}" != "true" ]] || [[ -z "$(tr -d '[:space:]' < TODO.jsonl 2>/dev/null)" ]]; then
+        # No unresolved review threads were reported, but review feedback was
+        # detected: record a task deterministically so the work is tracked in
+        # TODO.jsonl instead of being done with no progress file at all (#948).
+        printf '{"task":"Address the review feedback on PR #%s"}\n' "${pr}" > TODO.jsonl
+        seeded_feedback_todo="true"
+        echo "Recorded 1 review feedback item(s) in TODO.jsonl." >&2
       fi
 
       # The coding agent answers the reviewer in the thread itself (the reply
@@ -1943,7 +1950,7 @@ drive() {
       # The review feedback items are already recorded in TODO.jsonl above, so
       # the agent only has to do the work, commit with `git vc`, and empty
       # TODO.jsonl once every item is addressed.
-      local code_help="Address the pull request review feedback. The review feedback items are recorded as tasks in TODO.jsonl (one JSON line per item) so the work is tracked; work on ONE item per round (the first remaining task in TODO.jsonl), make the code change, remove that task's line from TODO.jsonl, commit with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Leave any remaining items for the following rounds. Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
+      local code_help="Address the pull request review feedback. The review feedback items are already recorded as tasks in TODO.jsonl (one JSON line per item) so the work is tracked; make the code changes, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Empty TODO.jsonl once all items are addressed. Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
 
 ${summary}"
       if ! implement "${title}" "${body}" "${code_help}" "${base}"; then
