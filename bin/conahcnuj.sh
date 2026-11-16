@@ -1862,8 +1862,11 @@ drive() {
 
     if [[ "${pr_draft}" == "true" ]]; then
       echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
-      gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
-      pr_draft="false"
+      if gh_api_ready_pr "${owner}" "${repo}" "${pr}"; then
+        pr_draft="false"
+      else
+        echo "WARNING: could not mark PR #${pr} ready for review; keeping it a draft." >&2
+      fi
     fi
 
     # --- review feedback phase ---
@@ -1899,7 +1902,9 @@ drive() {
       CHANGES_REQUESTED|COMMENTED|REVIEW_REQUIRED|"") actionable="true" ;;
     esac
 
-    if [[ "${actionable}" == "true" && -n "${sig}" && "${sig}" != "${last_sig}" ]]; then
+    # A null review decision means no review has been recorded, so there is
+    # no feedback to address: do not fire an implementation round for it.
+    if [[ "${decision}" != "null" && "${actionable}" == "true" && -n "${sig}" && "${sig}" != "${last_sig}" ]]; then
       last_sig="${sig}"
       # A fresh round invalidates the previous hand-off: the owner has to be
       # asked again once this round's work passes the constraints, and until
