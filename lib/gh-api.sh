@@ -83,7 +83,7 @@ gh_api_escape() {
           if (c in ctl) printf "\\u%04x", ctl[c]
           else printf "%s", c
         }
-      }'
+      }' 2>/dev/null || true
 }
 
 # Read a single line from stdin (used by every test-mode function so that a
@@ -111,7 +111,7 @@ gh_api_get_token() {
 gh_api_http_status() {
   tr -d '\r' < "${1}" 2>/dev/null |
     sed -n 's#^HTTP/[0-9.]* \([0-9][0-9][0-9]\).*$#\1#p' |
-    tail -n 1
+    tail -n 1 2>/dev/null || true
 }
 
 # HTTP layer. Args: method url [request-body]
@@ -175,7 +175,7 @@ gh_api_call() {
     fi
     echo "ERROR: ${method} ${url} -> ${detail}: $(head -c 300 "${body}" | tr -d '\r\n')" >&2
   fi
-  cat "${body}"
+  cat "${body}" 2>/dev/null || true
   rm -f "${body}"
   case "${code}" in
     200|201) return 0 ;;
@@ -568,7 +568,7 @@ gh_api_review_summary() {
         } catch (e) {
         }
       });
-    ' <<<"${json}"
+    ' <<<"${json}" 2>/dev/null || true
     return 0
   fi
 
@@ -622,7 +622,7 @@ gh_api_format_unresolved_threads() {
         } catch (e) {
         }
       });
-    ' <<<"${json}"
+    ' <<<"${json}" 2>/dev/null || true
     return 0
   fi
 
@@ -650,9 +650,9 @@ gh_api_format_unresolved_threads() {
       while IFS= read -r bn; do
         [[ -z "${bn}" ]] && continue
         printf -- '- %s\n' "${bn}" 2>/dev/null || true
-      done < <(grep -oE '"body":"[^"]*"' <<<"${tn}" | sed 's/"body":"//; s/"$//' || true)
+      done < <(grep -oE '"body":"[^"]*"' <<<"${tn}" 2>/dev/null | sed 's/"body":"//; s/"$//' 2>/dev/null || true)
     fi
-  done < <(grep -oE '\{"isResolved"[[:space:]]*:[[:space:]]*false[[:space:]]*,[[:space:]]*"comments"[[:space:]]*:[[:space:]]*\{"nodes"[[:space:]]*:[[:space:]]*\[[^]]*\]' <<<"${threads_part}" || true)
+  done < <(grep -oE '\{"isResolved"[[:space:]]*:[[:space:]]*false[[:space:]]*,[[:space:]]*"comments"[[:space:]]*:[[:space:]]*\{"nodes"[[:space:]]*:[[:space:]]*\[[^]]*\]' <<<"${threads_part}" 2>/dev/null || true)
 }
 gh_api_review_fingerprint() {
   local raw="${1}" matches="" decision=""
@@ -660,7 +660,7 @@ gh_api_review_fingerprint() {
   # must not look like new reviewer input, so drop the isResolved tokens. The
   # thread's comments still hash, which keeps a later resolution from
   # changing the fingerprint (no spurious round).
-  matches="$(grep -oE '\{"state":"[^"]*","body":"[^"]*","author":\{"login":"[^"]*"\}|\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*"' <<<"${raw}" | grep -vE '"author"[[:space:]]*:[[:space:]]*\{[[:space:]]*"login"[[:space:]]*:[[:space:]]*"[^"]*\[bot\]' || true)"
+  matches="$(grep -oE '\{"state":"[^"]*","body":"[^"]*","author":\{"login":"[^"]*"\}|\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*"' <<<"${raw}" 2>/dev/null | grep -vE '"author"[[:space:]]*:[[:space:]]*\{[[:space:]]*"login"[[:space:]]*:[[:space:]]*"[^"]*\[bot\]' 2>/dev/null || true)"
   if [[ -z "${matches}" ]]; then
     # Only a decision that means "do work now" counts as feedback on its own;
     # REVIEW_REQUIRED / empty just mean "waiting for reviewers".
@@ -670,7 +670,7 @@ gh_api_review_fingerprint() {
     fi
   fi
   local hash
-  hash="$(printf '%s%s' "${matches}" "${decision}" 2>/dev/null | sort -u | cksum | cut -d' ' -f1 2>/dev/null || true)"
+  hash="$(printf '%s%s' "${matches}" "${decision}" 2>/dev/null | sort -u 2>/dev/null | cksum 2>/dev/null | cut -d' ' -f1 2>/dev/null || true)"
   printf '%s\n' "${hash}" 2>/dev/null || true
 }
 
@@ -891,10 +891,10 @@ gh_api_requested_reviewers() {
   # already recorded a request on and the driver kept dying on the hand-off
   # (issue #136: PR #687 carried reviewRequests=[conahcnuj] and the run still
   # exited 1 with "could not request review").
-  logins="$(grep -oE '"login"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${json}" |
-    sed 's/^"login"[[:space:]]*:[[:space:]]*"//; s/"$//' || true)"
-  teams="$(grep -oE '"slug"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${json}" |
-    sed 's/^"slug"[[:space:]]*:[[:space:]]*"//; s/"$//; s/^/team:/' || true)"
+  logins="$(grep -oE '"login"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${json}" 2>/dev/null |
+    sed 's/^"login"[[:space:]]*:[[:space:]]*"//; s/"$//' 2>/dev/null || true)"
+  teams="$(grep -oE '"slug"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${json}" 2>/dev/null |
+    sed 's/^"slug"[[:space:]]*:[[:space:]]*"//; s/"$//; s/^/team:/' 2>/dev/null || true)"
   if [[ -n "${logins}" ]]; then
     printf '%s\n' "${logins}" 2>/dev/null || true
   fi
@@ -915,8 +915,8 @@ gh_api_repo_admins() {
   else
     json="$(gh_api_call GET "https://api.github.com/repos/${owner}/${repo}/collaborators?permission=admin")" || return 1
   fi
-  grep -oE '"login"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${json}" |
-    sed 's/^"login"[[:space:]]*:[[:space:]]*"//; s/"$//' || true
+  grep -oE '"login"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${json}" 2>/dev/null |
+    sed 's/^"login"[[:space:]]*:[[:space:]]*"//; s/"$//' 2>/dev/null || true
 }
 
 # Post a PR/issue comment. Args: owner repo number body  (output: comment id)

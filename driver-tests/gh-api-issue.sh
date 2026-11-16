@@ -602,3 +602,21 @@ test_repo_admins_single
 test_merge_pr
 
 echo "All gh-api tests passed"
+# Reproduction for issue #940: an early-closing consumer must not make a helper
+# leak "printf: write error: Broken pipe" or fail under `set -o pipefail`.
+test_sigpipe_early_close() {
+  local json errfile status
+  json="$(python3 -c 'import json; print(json.dumps([{"login":"u%d"%i} for i in range(2000)]))')"
+  errfile="$(mktemp)"
+  set +e
+  printf '%s\n' "${json}" | gh_api_repo_admins conahcnuj conahcnuj 2>"${errfile}" | true
+  status=${PIPESTATUS[0]}
+  set -e
+  [[ ${status} -eq 0 ]] || { echo "FAIL: exit ${status}"; cat "${errfile}"; rm -f "${errfile}"; exit 1; }
+  if grep -q "Broken pipe" "${errfile}"; then
+    echo "FAIL: Broken pipe leaked"; cat "${errfile}"; rm -f "${errfile}"; exit 1
+  fi
+  rm -f "${errfile}"
+}
+
+test_sigpipe_early_close
