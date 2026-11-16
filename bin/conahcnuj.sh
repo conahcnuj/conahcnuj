@@ -1886,13 +1886,46 @@ drive() {
       conflict_fix_pushed="false"
       reply_pending="true"
       echo "New review feedback detected; addressing it." >&2
+      # Collect the unresolved review threads once so the feedback items can be
+      # recorded deterministically (issue #948): the driver writes them into
+      # TODO.jsonl itself instead of trusting the agent to do it, so the work is
+      # tracked even when the agent forgets. The summary already carries them as
+      # data for the prompt.
+      local feedback_threads
+      feedback_threads="$(printf '%s' "${raw}" | gh_api_unresolved_threads)"
+      if [[ -n "${feedback_threads}" ]]; then
+        # One JSON line per feedback item, so todo_present() keeps the PR a
+        # draft until every item is addressed and TODO.jsonl is emptied.
+        if command -v node >/dev/null 2>&1; then
+          printf '%s\n' "${feedback_threads}" | node -e '
+            let data = "";
+            process.stdin.on("data", c => data += c);
+            process.stdin.on("end", () => {
+              for (const line of data.split("\n")) {
+                if (line.trim() === "") continue;
+                process.stdout.write(JSON.stringify({ task: line }) + "\n");
+              }
+            });
+          ' > TODO.jsonl
+        else
+          : > TODO.jsonl
+          while IFS= read -r _line; do
+            [[ -z "${_line}" ]] && continue
+            printf '{"task":%s}\n' "$(printf '%s' "${_line}" | sed 's/\\/\\\\/g; s/"/\\"/g')" >> TODO.jsonl
+          done <<< "${feedback_threads}"
+        fi
+        echo "Recorded $(grep -c '[^[:space:]]' TODO.jsonl 2>/dev/null || printf 0) review feedback item(s) in TODO.jsonl." >&2
+      fi
       # The coding agent answers the reviewer in the thread itself (the reply
       # endpoint and every thread comment id are in the summary), besides any
       # code change the feedback asks for. The driver no longer posts its own
       # "Addressed the review feedback" comment: the in-thread replies are how
       # the reviewer learns what happened. Because the fingerprint drops
       # bot-authored comments, those replies never look like fresh feedback.
-      local code_help="Address the pull request review feedback. Record each review feedback item as a task in TODO.jsonl (one JSON line per item) so the work is tracked, make the code changes, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Empty TODO.jsonl once all items are addressed. Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
+      # The review feedback items are already recorded in TODO.jsonl above, so
+      # the agent only has to do the work, commit with `git vc`, and empty
+      # TODO.jsonl once every item is addressed.
+      local code_help="Address the pull request review feedback. The review feedback items are already recorded as tasks in TODO.jsonl (one JSON line per item) so the work is tracked; make the code changes, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Empty TODO.jsonl once all items are addressed. Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
 
 ${summary}"
       if ! implement "${title}" "${body}" "${code_help}" "${base}"; then
