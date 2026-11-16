@@ -24,16 +24,6 @@ print(json.dumps(obj))
 PY
 }
 
-assert_no_broken_pipe() {
-  local label="$1"
-  local errfile status
-  errfile="$(mktemp)"
-  # stdin is already fed by caller via pipe into this function? We handle below.
-  set +e
-  cat >/dev/null 2>&1
-  :
-}
-
 # We'll inline each test instead of a generic helper.
 
 # review_summary (node path when node is present, awk fallback otherwise).
