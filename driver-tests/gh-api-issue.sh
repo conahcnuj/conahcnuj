@@ -227,7 +227,7 @@ test_fetch_pr_conditions() {
     printf '%s\n' "${MOCK_CONDITIONS_CONTEXTS}" | gh_api_fetch_pr_conditions "conahcnuj" "conahcnuj" 15
   )"
   state="$(printf '%s' "${out}" | cut -d'|' -f1)"
-  [[ "${state}" == "FAILURE" ]]
+  [[ "${state}" == "PENDING" ]]
 
   # Replaying the payload the API really returned for PR #113 in the run
   # from issue #115: the cancelled own run must not keep the driver

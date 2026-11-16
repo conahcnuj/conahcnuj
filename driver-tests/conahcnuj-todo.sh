@@ -134,13 +134,19 @@ grep -q "Created draft PR #123" "${LOG}" || { echo "FAIL: the PR was not created
 grep -q "TODO.jsonl still has unfinished tasks; keeping PR #123 a draft and continuing the work." "${LOG}" || { echo "FAIL: the driver did not keep working while TODO.jsonl had a task"; exit 1; }
 grep -q "TODO.jsonl is clean; marking PR #123 ready for review." "${LOG}" || { echo "FAIL: the driver did not mark the PR ready after TODO.jsonl had no line"; exit 1; }
 grep -q "Removing the empty TODO.jsonl so it never reaches main." "${LOG}" || { echo "FAIL: the driver did not remove the empty TODO.jsonl"; exit 1; }
-# Ordering: draft creation -> ready -> review hand-off. No review request may
-# precede the ready transition.
+# Ordering: draft creation -> ready -> removal -> review hand-off. The removal
+# is a new commit on the branch, so it must land after the PR is ready: a commit
+# that lands while the PR is still a draft has its CI run skip every check
+# (issue: CI skipped after ready-for-review). No review request may precede the
+# ready transition either.
 DRAFT_LINE="$(grep -n "Created draft PR #123" "${LOG}" | head -1 | cut -d: -f1)"
 READY_LINE="$(grep -n "TODO.jsonl is clean; marking PR #123 ready for review." "${LOG}" | head -1 | cut -d: -f1)"
+REMOVE_LINE="$(grep -n "Removing the empty TODO.jsonl so it never reaches main." "${LOG}" | head -1 | cut -d: -f1)"
 ASSIGNED_LINE="$(grep -n "Assigned conahcnuj as reviewer on PR #123" "${LOG}" | head -1 | cut -d: -f1)"
 [[ -n "${DRAFT_LINE}" && -n "${READY_LINE}" && "${DRAFT_LINE}" -lt "${READY_LINE}" ]] || { echo "FAIL: the draft must be created before it is made ready"; exit 1; }
+[[ -n "${REMOVE_LINE}" && "${READY_LINE}" -lt "${REMOVE_LINE}" ]] || { echo "FAIL: the empty TODO.jsonl must be removed after the PR is made ready so its commit triggers CI"; exit 1; }
 [[ -n "${ASSIGNED_LINE}" && "${READY_LINE}" -lt "${ASSIGNED_LINE}" ]] || { echo "FAIL: the review request must come after the PR is made ready"; exit 1; }
+[[ -n "${ASSIGNED_LINE}" && "${REMOVE_LINE}" -lt "${ASSIGNED_LINE}" ]] || { echo "FAIL: the review request must come after the TODO.jsonl cleanup commit"; exit 1; }
 # The run keeps going past the hand-off and ends on the owner's approval.
 APPROVED_LINE="$(grep -n "Ready to merge" "${LOG}" | head -1 | cut -d: -f1)"
 [[ -n "${APPROVED_LINE}" && "${ASSIGNED_LINE}" -lt "${APPROVED_LINE}" ]] || { echo "FAIL: the driver did not wait for the owner's approval"; exit 1; }
