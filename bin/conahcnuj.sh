@@ -1821,7 +1821,7 @@ drive() {
       fi
       echo "TODO.jsonl still has unfinished tasks; keeping PR #${pr} a draft and continuing the work." >&2
       local todo_change="false"
-      if implement "${title}" "${body}" "The per-issue progress file TODO.jsonl is still in the working tree, so the issue is not finished and the pull request is still a draft. Continue the work, keep TODO.jsonl current, and empty it (remove every line, but do not delete the file; the driver removes the empty file) once the issue is fully resolved and the pull request is ready for review." "${base}"; then
+      if implement "${title}" "${body}" "The per-issue progress file TODO.jsonl is still in the working tree, so the issue is not finished and the pull request is still a draft. Address only the first unfinished task in TODO.jsonl this round: make the code change for that one task, commit with \`git vc\`, and remove that task's line from TODO.jsonl once it is done (leave the remaining tasks). Keep TODO.jsonl current, and leave it empty (no lines, but do not delete the file; the driver removes the empty file) only once every task is finished and the pull request is ready for review." "${base}"; then
         todo_change="true"
       fi
       # Same rule as the other rounds: only a dirty tree WITH a .commit-msg is
@@ -1932,11 +1932,17 @@ drive() {
         fi
         seeded_feedback_todo="true"
         echo "Recorded $(grep -c '[^[:space:]]' TODO.jsonl 2>/dev/null || printf 0) review feedback item(s) in TODO.jsonl." >&2
-      elif [[ "${had_todo_before}" != "true" ]] || [[ -z "$(tr -d '[:space:]' < TODO.jsonl 2>/dev/null)" ]]; then
+      else
         # No unresolved review threads were reported, but review feedback was
         # detected: record a task deterministically so the work is tracked in
         # TODO.jsonl instead of being done with no progress file at all (#948).
-        printf '{"task":"Address the review feedback on PR #%s"}\n' "${pr}" > TODO.jsonl
+        # Append when TODO.jsonl already carries tasks so prior progress is not
+        # lost; the driver manages progress one task at a time (#949).
+        if [[ "${had_todo_before}" == "true" ]] && [[ -n "$(tr -d '[:space:]' < TODO.jsonl 2>/dev/null)" ]]; then
+          printf '{"task":"Address the review feedback on PR #%s"}\n' "${pr}" >> TODO.jsonl
+        else
+          printf '{"task":"Address the review feedback on PR #%s"}\n' "${pr}" > TODO.jsonl
+        fi
         seeded_feedback_todo="true"
         echo "Recorded 1 review feedback item(s) in TODO.jsonl." >&2
       fi
@@ -1950,7 +1956,7 @@ drive() {
       # The review feedback items are already recorded in TODO.jsonl above, so
       # the agent only has to do the work, commit with `git vc`, and empty
       # TODO.jsonl once every item is addressed.
-      local code_help="Address the pull request review feedback. The review feedback items are already recorded as tasks in TODO.jsonl (one JSON line per item) so the work is tracked; make the code changes, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Empty TODO.jsonl once all items are addressed. Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
+      local code_help="Address the pull request review feedback. The review feedback items are already recorded as tasks in TODO.jsonl (one JSON line per item) so the work is tracked. Address only the first unfinished task in TODO.jsonl this round: make the code change for that one task, commit with \`git vc\`, and remove that task's line from TODO.jsonl once it is done (leave the remaining tasks). Resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
 
 ${summary}"
       if ! implement "${title}" "${body}" "${code_help}" "${base}"; then
