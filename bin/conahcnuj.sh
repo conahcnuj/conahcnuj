@@ -1945,18 +1945,13 @@ drive() {
         fi
         seeded_feedback_todo="true"
         echo "Recorded 1 review feedback item(s) in TODO.jsonl." >&2
-      fi
 
       # The coding agent answers the reviewer in the thread itself (the reply
       # endpoint and every thread comment id are in the summary), besides any
       # code change the feedback asks for. The driver no longer posts its own
-      # "Addressed the review feedback" comment: the in-thread replies are how
-      # the reviewer learns what happened. Because the fingerprint drops
-      # bot-authored comments, those replies never look like fresh feedback.
-      # The review feedback items are already recorded in TODO.jsonl above, so
-      # the agent only has to do the work, commit with `git vc`, and empty
-      # TODO.jsonl once every item is addressed.
-      local code_help="Address the pull request review feedback. The review feedback items are already recorded as tasks in TODO.jsonl (one JSON line per item) so the work is tracked. Address only the first unfinished task in TODO.jsonl this round: make the code change for that one task, run the repository's own validation, commit with \`git vc\`, and remove that task's line from TODO.jsonl once it is done (leave the remaining tasks). Resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
+      # "Addressed the review feedback" comment.
+      local code_help="Address the pull request review feedback. Make the code changes, run the repository's own validation, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
+
 
 ${summary}"
       if ! implement "${title}" "${body}" "${code_help}" "${base}"; then
