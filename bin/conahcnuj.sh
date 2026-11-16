@@ -1297,22 +1297,24 @@ implement() {
       if workdir_changed "${workdir}"; then
         tree_changed="true"
       fi
-      if [[ "${committed}" == "true" ]]; then
-        rm -f "${workdir}/.commit-msg"
-        echo "Model ${model} completed the work and committed it." >&2
-        OPENCODE_LAST_MODEL="${model}"
-        return 0
-      fi
-      if [[ "${tree_changed}" == "true" && "${wrote_message}" == "true" ]]; then
-        echo "Model ${model} completed the work." >&2
-        OPENCODE_LAST_MODEL="${model}"
-        return 0
-      fi
-      if [[ "${wrote_message}" == "true" ]] && branch_has_commits "" "${base_branch}"; then
-        rm -f "${workdir}/.commit-msg"
-        echo "Model ${model} wrote .commit-msg and left the tree as it was; the branch already carries the implementation, so the round is complete." >&2
-        OPENCODE_LAST_MODEL="${model}"
-        return 0
+      if [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" != "true" ]]; then
+        if [[ "${committed}" == "true" ]]; then
+          rm -f "${workdir}/.commit-msg"
+          echo "Model ${model} completed the work and committed it." >&2
+          OPENCODE_LAST_MODEL="${model}"
+          return 0
+        fi
+        if [[ "${tree_changed}" == "true" && "${wrote_message}" == "true" ]]; then
+          echo "Model ${model} completed the work." >&2
+          OPENCODE_LAST_MODEL="${model}"
+          return 0
+        fi
+        if [[ "${wrote_message}" == "true" ]] && branch_has_commits "" "${base_branch}"; then
+          rm -f "${workdir}/.commit-msg"
+          echo "Model ${model} wrote .commit-msg and left the tree as it was; the branch already carries the implementation, so the round is complete." >&2
+          OPENCODE_LAST_MODEL="${model}"
+          return 0
+        fi
       fi
       rm -f "${workdir}/.commit-msg"
       previous_model="${model}"
@@ -1331,7 +1333,7 @@ implement() {
           echo "Model ${model} failed before completing the work: environment error (provider unreachable or credentials rejected); giving up on provider ${provider} for the rest of this run." >&2
         elif [[ "${OPENCODE_ROUND_RATE_LIMITED}" == "true" ]]; then
           echo "Model ${model} hit a rate limit; trying the next model without waiting for the retry." >&2
-        elif [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" || "${OPENCODE_ROUND_CANCELLED_INPUT}" == "true" || "${OPENCODE_ROUND_INPUT_REQUEST_CANCELLED}" == "true" ]]; then
+        elif [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
           echo "Model ${model} failed before completing the work: cancelled a request for input this run cannot answer; handing off to the next model." >&2
         else
           echo "Model ${model} failed before completing the work; handing off to the next model." >&2
