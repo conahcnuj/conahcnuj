@@ -575,10 +575,6 @@ gh_api_review_summary() {
               }
             }
           }
-          const resolvedCount = threads.filter(t => t.isResolved).length;
-          if (resolvedCount > 0) {
-            console.log("Hidden (resolved) conversations: " + resolvedCount + " — already settled; hidden conversations are resolved (treat hidden conversations as resolved).");
-          }
         } catch (e) {
         }
       });
@@ -595,11 +591,6 @@ gh_api_review_summary() {
   if [[ -n "${fmt}" ]]; then
     echo "REVIEW THREADS (unresolved):" 2>/dev/null || true
     printf '%s\n' "${fmt}" 2>/dev/null || true
-  fi
-  local resolved_count
-  resolved_count="$(printf '%s' "${json}" | grep -oE '"isResolved"[[:space:]]*:[[:space:]]*true' | wc -l | tr -d '[:space:]')"
-  if [[ "${resolved_count}" -gt 0 ]]; then
-    printf 'Hidden (resolved) conversations: %s — already settled; hidden conversations are resolved (treat hidden conversations as resolved).\n' "${resolved_count}" 2>/dev/null || true
   fi
 }
 gh_api_unresolved_threads() {

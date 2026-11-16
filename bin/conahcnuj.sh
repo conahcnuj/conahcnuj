@@ -1118,19 +1118,6 @@ collect_initial_context() {
 ${threads}"
       labels="unresolved review threads of PR #${pr}"
     fi
-    # Count the resolved (hidden) conversations so the agent knows they exist
-    # and are already settled instead of re-reading them.
-    local resolved_count
-    resolved_count="$(printf '%s' "${raw}" | grep -oE '"isResolved"[[:space:]]*:[[:space:]]*true' | wc -l | tr -d '[:space:]')"
-    if [[ "${resolved_count}" -gt 0 ]]; then
-      if [[ -n "${out}" ]]; then
-        out="${out}
-
-"
-      fi
-      out="${out}Hidden (resolved) conversations: ${resolved_count} — already settled; hidden conversations are resolved (treat hidden conversations as resolved)."
-      labels="${labels:+${labels}, }hidden resolved conversations"
-    fi
   fi
 
   local file_list file content

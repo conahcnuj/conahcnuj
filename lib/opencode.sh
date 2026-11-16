@@ -281,7 +281,7 @@ opencode_build_handoff_prompt() {
   local previous_model="${1}"
   # The literal backticks are prompt text, not command substitutions.
   # shellcheck disable=SC2016
-  printf 'You are taking over unfinished work from model %s because it could not complete the task. Continue this same session and preserve all work already present in the working tree. Inspect the current progress, finish every remaining requirement, run the relevant validation, and commit with `git vc`. Do not restart from scratch or discard existing work. Hidden (resolved) conversations are already settled; hidden conversations are resolved (treat hidden conversations as resolved); do not re-read them. If you leave any changes uncommitted, write their commit message (one line, no more than 72 characters) to .commit-msg in the repository root so the driver can commit them; once everything is committed there is no .commit-msg to write.\n\n%s\n' "${previous_model}" "$(opencode_agent_contract)"
+  printf 'You are taking over unfinished work from model %s because it could not complete the task. Continue this same session and preserve all work already present in the working tree. Inspect the current progress, finish every remaining requirement, run the relevant validation, and commit with `git vc`. Do not restart from scratch or discard existing work. If you leave any changes uncommitted, write their commit message (one line, no more than 72 characters) to .commit-msg in the repository root so the driver can commit them; once everything is committed there is no .commit-msg to write.\n\n%s\n' "${previous_model}" "$(opencode_agent_contract)"
 }
 
 # True when the round's JSON event stream carries an environment error
