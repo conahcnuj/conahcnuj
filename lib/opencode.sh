@@ -61,6 +61,8 @@ OPENCODE_ROUND_RATE_LIMITED="false"
 # interactive tool that is unavailable here, so its other models stay in the
 # pool and the next model is tried. opencode_run sets it for every round.
 OPENCODE_ROUND_INPUT_CANCELLED="false"
+OPENCODE_ROUND_CANCELLED_INPUT="false"
+OPENCODE_ROUND_INPUT_REQUEST_CANCELLED="false"
 
 # Probe whether a candidate opencode binary actually runs. Under WSL with
 # interop unavailable a Windows binary is "found" (it sits on a /mnt path and
@@ -413,6 +415,8 @@ opencode_run() {
   OPENCODE_ROUND_QUOTA_EXHAUSTED="false"
   OPENCODE_ROUND_RATE_LIMITED="false"
   OPENCODE_ROUND_INPUT_CANCELLED="false"
+  OPENCODE_ROUND_CANCELLED_INPUT="false"
+  OPENCODE_ROUND_INPUT_REQUEST_CANCELLED="false"
   # A caller may supply the whole prompt (the feedback reply round does): it
   # then takes precedence over both the hand-off and the implementation prompt
   # so the reply instructions and thread ids actually reach the model.
@@ -499,6 +503,10 @@ opencode_run() {
       fi
     done
     unset _ic_var
+    if [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
+      OPENCODE_ROUND_CANCELLED_INPUT="true"
+      OPENCODE_ROUND_INPUT_REQUEST_CANCELLED="true"
+    fi
     if [[ "${MOCK_OPENCODE_ERROR:-}" == "${model}" || "${OPENCODE_ROUND_ENVIRONMENT}" == "true" || "${OPENCODE_ROUND_MODEL_GONE}" == "true" || "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" || "${OPENCODE_ROUND_RATE_LIMITED}" == "true" || "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
       if [[ -d "${workdir}" && -w "${workdir}" ]]; then
         printf 'partial change from %s\n' "${model}" >> "${workdir}/conahcnuj.mock"
@@ -722,6 +730,10 @@ opencode_run() {
   fi
   if [[ "${status}" != "0" ]] && opencode_round_is_input_cancelled "${output_file}" "${err_file}"; then
     OPENCODE_ROUND_INPUT_CANCELLED="true"
+    # shellcheck disable=SC2034
+    OPENCODE_ROUND_CANCELLED_INPUT="true"
+    # shellcheck disable=SC2034
+    OPENCODE_ROUND_INPUT_REQUEST_CANCELLED="true"
   fi
   local detected_session
   detected_session="$(sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p' "${output_file}" | sed -n '1p')"
