@@ -384,10 +384,10 @@ opencode_round_is_rate_limited() {
 opencode_round_is_input_cancelled() {
   local output_file="${1}" err_file="${2:-}"
   local pattern='Cancelled a request for input this run cannot answer|cannot answer: .* (Web Search|web search)'
-  if [[ -f "${output_file}" ]] && grep -F '"type":"error"' "${output_file}" 2>/dev/null | grep -Eiq "Cancelled a request for input this run cannot answer"; then
+  if [[ -f "${output_file}" ]] && grep -F '"type":"error"' "${output_file}" 2>/dev/null | grep -Eiq "${pattern}"; then
     return 0
   fi
-  if [[ -n "${err_file}" && -f "${err_file}" ]] && grep -Eiq "Cancelled a request for input this run cannot answer" "${err_file}" 2>/dev/null; then
+  if [[ -n "${err_file}" && -f "${err_file}" ]] && grep -Eiq "${pattern}" "${err_file}" 2>/dev/null; then
     return 0
   fi
   return 1
@@ -720,7 +720,11 @@ opencode_run() {
   if [[ "${status}" != "0" ]] && { [[ "${rate_aborted}" == "true" ]] || opencode_round_is_rate_limited "${output_file}" "${err_file}"; }; then
     OPENCODE_ROUND_RATE_LIMITED="true"
   fi
-  if [[ "${status}" != "0" ]] && opencode_round_is_input_cancelled "${output_file}" "${err_file}"; then
+  # A cancelled input request is a terminal failure of the round even when the
+  # backend happens to exit zero, so classify it independent of the exit status
+  # and force a non-zero result; otherwise the round could be reported as
+  # completed ("false completion").
+  if opencode_round_is_input_cancelled "${output_file}" "${err_file}"; then
     OPENCODE_ROUND_INPUT_CANCELLED="true"
   fi
   local detected_session
@@ -730,6 +734,9 @@ opencode_run() {
     export OPENCODE_SESSION_ID
   fi
   rm -f "${output_file}" "${prompt_file}" "${err_file}"
+  if [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
+    status=1
+  fi
   if [[ "${status}" == "124" ]]; then
     echo "opencode exceeded the remaining driver time budget; stopping this model." >&2
   fi
