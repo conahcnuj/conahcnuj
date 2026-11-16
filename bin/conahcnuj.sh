@@ -1294,7 +1294,12 @@ implement() {
         wrote_message="true"
       fi
       tree_changed="false"
-      if workdir_changed "${workdir}"; then
+      # A change that is only the per-issue progress file TODO.jsonl (e.g. the
+      # driver seeding review feedback items, or an agent emptying it) does not
+      # count as a code change for the message-only round detection: otherwise
+      # a message-only round would look like a real implementation and keep
+      # its .commit-msg uncommitted (#948).
+      if git -C "${workdir}" status --porcelain 2>/dev/null | grep -v '\.commit-msg' | grep -v '\.branch-name' | grep -v 'TODO\.jsonl' | grep -q .; then
         tree_changed="true"
       fi
       if [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" != "true" ]]; then
@@ -1886,46 +1891,36 @@ drive() {
       conflict_fix_pushed="false"
       reply_pending="true"
       echo "New review feedback detected; addressing it." >&2
-      # Collect the unresolved review threads once so the feedback items can be
-      # recorded deterministically (issue #948): the driver writes them into
-      # TODO.jsonl itself instead of trusting the agent to do it, so the work is
-      # tracked even when the agent forgets. The summary already carries them as
-      # data for the prompt.
-      local feedback_threads
-      feedback_threads="$(printf '%s' "${raw}" | gh_api_unresolved_threads)"
-      if [[ -n "${feedback_threads}" ]]; then
-        # One JSON line per feedback item, so todo_present() keeps the PR a
-        # draft until every item is addressed and TODO.jsonl is emptied.
-        if command -v node >/dev/null 2>&1; then
-          printf '%s\n' "${feedback_threads}" | node -e '
-            let data = "";
-            process.stdin.on("data", c => data += c);
-            process.stdin.on("end", () => {
-              for (const line of data.split("\n")) {
-                if (line.trim() === "") continue;
-                process.stdout.write(JSON.stringify({ task: line }) + "\n");
-              }
-            });
-          ' > TODO.jsonl
-        else
-          : > TODO.jsonl
-          while IFS= read -r _line; do
-            [[ -z "${_line}" ]] && continue
-            printf '{"task":%s}\n' "$(printf '%s' "${_line}" | sed 's/\\/\\\\/g; s/"/\\"/g')" >> TODO.jsonl
-          done <<< "${feedback_threads}"
-        fi
-        echo "Recorded $(grep -c '[^[:space:]]' TODO.jsonl 2>/dev/null || printf 0) review feedback item(s) in TODO.jsonl." >&2
-      fi
       # The coding agent answers the reviewer in the thread itself (the reply
       # endpoint and every thread comment id are in the summary), besides any
       # code change the feedback asks for. The driver no longer posts its own
       # "Addressed the review feedback" comment: the in-thread replies are how
       # the reviewer learns what happened. Because the fingerprint drops
       # bot-authored comments, those replies never look like fresh feedback.
-      # The review feedback items are already recorded in TODO.jsonl above, so
-      # the agent only has to do the work, commit with `git vc`, and empty
-      # TODO.jsonl once every item is addressed.
-      local code_help="Address the pull request review feedback. The review feedback items are already recorded as tasks in TODO.jsonl (one JSON line per item) so the work is tracked; make the code changes, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Empty TODO.jsonl once all items are addressed. Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
+      # The driver owns TODO.jsonl's lifecycle, including its creation: an
+      # agent may update task lines but never creates the file. Seed it here
+      # with the review feedback items so the work is tracked even when the
+      # agent would otherwise have nothing to update (#948).
+      local seeded_feedback_todo="false"
+      local seeded_feedback_content=""
+      if [[ ! -f TODO.jsonl ]] || [[ "$(todo_task_count)" == "0" ]]; then
+        local _fb_line _fb_task
+        while IFS= read -r _fb_line; do
+          [[ -z "${_fb_line}" ]] && continue
+          _fb_task="${_fb_line#- }"
+          _fb_task="${_fb_task//\\/\\\\}"
+          _fb_task="${_fb_task//\"/\\\"}"
+          seeded_feedback_content="${seeded_feedback_content}{\"task\":\"${_fb_task}\"}"$'\n'
+        done < <(printf '%s\n' "${summary}" | grep '^-' 2>/dev/null || true)
+        if [[ -z "${seeded_feedback_content}" ]]; then
+          seeded_feedback_content='{"task":"Address the review feedback on PR #'"${pr}"'"}'$'\n'
+        fi
+        printf '%s' "${seeded_feedback_content}" > TODO.jsonl
+        seeded_feedback_todo="true"
+        echo "Adding review feedback items to TODO.jsonl." >&2
+      fi
+
+      local code_help="Address the pull request review feedback. The driver has recorded each review feedback item as a task in TODO.jsonl; make the code changes, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Empty TODO.jsonl once all items are addressed. Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
 
 ${summary}"
       if ! implement "${title}" "${body}" "${code_help}" "${base}"; then
@@ -1937,10 +1932,21 @@ ${summary}"
       # .commit-msg (a provider outage mid-round is what filed issue #251):
       # there is nothing the driver may commit, and refusing must not abort the
       # run.
+      local committed_this_round="false"
       if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
-        commit_changes
+        if commit_changes; then
+          committed_this_round="true"
+        fi
       fi
       rm -f .commit-msg
+      # Drop a TODO we seeded if the round produced no commit, so a failed
+      # round leaves no phantom progress file behind (#948, #251).
+      if [[ "${committed_this_round}" != "true" && "${seeded_feedback_todo}" == "true" ]]; then
+        if [[ -f TODO.jsonl ]] && [[ "$(cat TODO.jsonl)" == "$(printf '%s' "${seeded_feedback_content}")" ]]; then
+          rm -f TODO.jsonl
+          seeded_feedback_todo="false"
+        fi
+      fi
       # If the feedback round left review items tracked in TODO.jsonl, the issue
       # is not finished yet: keep the PR a draft and let the TODO.jsonl gate
       # drive the remaining work instead of handing an unfinished PR back (#948).
