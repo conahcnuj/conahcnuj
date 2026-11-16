@@ -579,7 +579,7 @@ gh_api_review_summary() {
   local threads_part
   threads_part="$(sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p' <<<"${json}")"
   if grep '"isResolved"[[:space:]]*:[[:space:]]*false' <<<"${threads_part}" >/dev/null; then
-    echo "REVIEW THREADS (unresolved):"
+    echo "REVIEW THREADS (unresolved):" 2>/dev/null || true
   fi
   gh_api_format_unresolved_threads "${json}"
 }
@@ -895,8 +895,12 @@ gh_api_requested_reviewers() {
     sed 's/^"login"[[:space:]]*:[[:space:]]*"//; s/"$//' || true)"
   teams="$(grep -oE '"slug"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${json}" |
     sed 's/^"slug"[[:space:]]*:[[:space:]]*"//; s/"$//; s/^/team:/' || true)"
-  [[ -n "${logins}" ]] && printf '%s\n' "${logins}" 2>/dev/null || true
-  [[ -n "${teams}" ]] && printf '%s\n' "${teams}" 2>/dev/null || true
+  if [[ -n "${logins}" ]]; then
+    printf '%s\n' "${logins}" 2>/dev/null || true
+  fi
+  if [[ -n "${teams}" ]]; then
+    printf '%s\n' "${teams}" 2>/dev/null || true
+  fi
   return 0
 }
 
