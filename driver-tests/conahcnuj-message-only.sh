@@ -63,7 +63,6 @@ opencode/second"
 # The talker writes .commit-msg and touches nothing else.
 export MOCK_OPENCODE_MESSAGE_ONLY="opencode/talker"
 export CONAHCNUJ_REPO="conahcnuj/conahcnuj"
-unset GITHUB_ACTIONS CONAHCNUJ_GITHUB_ACTIONS CONAHCNUJ_CI
 
 LOG="${ROOT}/run.log"
 RC=0
