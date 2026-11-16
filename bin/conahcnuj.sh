@@ -1860,11 +1860,8 @@ drive() {
     # must not land on main, so remove it before the hand-off.
     if [[ "${pr_draft}" == "true" ]]; then
       echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
-      if gh_api_ready_pr "${owner}" "${repo}" "${pr}"; then
-        pr_draft="false"
-      else
-        echo "WARNING: could not mark PR #${pr} ready for review; keeping it a draft." >&2
-      fi
+      gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
+      pr_draft="false"
     fi
 
     remove_empty_todo
@@ -1898,13 +1895,16 @@ drive() {
     fi
 
     actionable="false"
-    case "${decision}" in
-      CHANGES_REQUESTED|COMMENTED|REVIEW_REQUIRED|"") actionable="true" ;;
-    esac
+    # A null review decision means no review has been recorded: there is no
+    # reviewer feedback to act on, so it must never be treated as actionable
+    # (otherwise the agent gets sent to "address feedback" that does not exist).
+    if [[ "${decision}" != "null" ]]; then
+      case "${decision}" in
+        CHANGES_REQUESTED|COMMENTED|REVIEW_REQUIRED|"") actionable="true" ;;
+      esac
+    fi
 
-    # A null review decision means no review has been recorded, so there is
-    # no feedback to address: do not fire an implementation round for it.
-    if [[ "${decision}" != "null" && "${actionable}" == "true" && -n "${sig}" && "${sig}" != "${last_sig}" ]]; then
+    if [[ "${actionable}" == "true" && -n "${sig}" && "${sig}" != "${last_sig}" ]]; then
       last_sig="${sig}"
       # A fresh round invalidates the previous hand-off: the owner has to be
       # asked again once this round's work passes the constraints, and until
