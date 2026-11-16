@@ -554,6 +554,7 @@ gh_api_review_summary() {
             for (const c of comments) {
               const id = c.databaseId;
               const author = (c.author && c.author.login) || "unknown";
+              if (/\[bot\]/.test(author)) continue;
               let body = c.body;
               if (body === undefined || body === null || body === "") body = "(no body)";
 
@@ -609,6 +610,7 @@ gh_api_format_unresolved_threads() {
             for (const c of comments) {
               const id = c.databaseId;
               const author = (c.author && c.author.login) || "unknown";
+              if (/\[bot\]/.test(author)) continue;
               let body = c.body;
               if (body === undefined || body === null || body === "") body = "(no body)";
               const esc = JSON.stringify(String(body)).slice(1, -1);
@@ -637,6 +639,8 @@ gh_api_format_unresolved_threads() {
       cid="$(gh_api_json_num "${cn}" "databaseId")"
       ca="$(gh_api_json_str "${cn}" "login")"
       cb="$(gh_api_json_str "${cn}" "body")"
+      # Skip comments authored by the bot itself.
+      [[ "${ca}" == *"[bot]"* ]] && continue
       [[ -n "${cb}" ]] || cb="(no body)"
       printed="true"
       if [[ -n "${cid}" ]]; then
