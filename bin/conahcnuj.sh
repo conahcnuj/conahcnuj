@@ -1882,15 +1882,42 @@ drive() {
       CHANGES_REQUESTED|COMMENTED|REVIEW_REQUIRED|"") actionable="true" ;;
     esac
 
-    if [[ "${actionable}" == "true" && -n "${sig}" && "${sig}" != "${last_sig}" ]]; then
-      last_sig="${sig}"
-      # A fresh round invalidates the previous hand-off: the owner has to be
-      # asked again once this round's work passes the constraints, and until
-      # then the driver must keep driving rather than wait.
-      handed_off="false"
-      conflict_fix_pushed="false"
-      reply_pending="true"
-      echo "New review feedback detected; addressing it." >&2
+    # Review feedback counts as feedback when there are unresolved threads
+    # or a review decision that demands work. Such feedback must never be
+    # acted on without a TODO.jsonl tracking it: if the progress file is
+    # missing or empty, seed the findings as tasks first instead of doing
+    # untracked work ("TODO.jsonlがないのになんか作業してる", #948).
+    has_feedback="false"
+    if [[ "${decision}" == "CHANGES_REQUESTED" || "${decision}" == "COMMENTED" ]]; then
+      has_feedback="true"
+    fi
+    if [[ -n "${sig}" ]]; then
+      has_feedback="true"
+    fi
+    need_feedback_round="false"
+    if [[ "${has_feedback}" == "true" ]]; then
+      if [[ -n "${sig}" && "${sig}" != "${last_sig}" ]]; then
+        need_feedback_round="true"
+      elif ! todo_present; then
+        # The progress file is gone/empty but review feedback is still open:
+        # re-seed the findings as TODO instead of working untracked.
+        need_feedback_round="true"
+      fi
+    fi
+    if [[ "${actionable}" == "true" && "${need_feedback_round}" == "true" ]]; then
+      if [[ -n "${sig}" && "${sig}" != "${last_sig}" ]]; then
+        last_sig="${sig}"
+        # A fresh round invalidates the previous hand-off: the owner has to be
+        # asked again once this round's work passes the constraints, and until
+        # then the driver must keep driving rather than wait.
+        handed_off="false"
+        conflict_fix_pushed="false"
+        reply_pending="true"
+        echo "New review feedback detected; addressing it." >&2
+      else
+        echo "Review feedback is open but TODO.jsonl is empty; re-seeding the findings as TODO." >&2
+        reply_pending="true"
+      fi
       # The coding agent answers the reviewer in the thread itself (the reply
       # endpoint and every thread comment id are in the summary), besides any
       # code change the feedback asks for. The driver no longer posts its own
