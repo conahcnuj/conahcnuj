@@ -1112,26 +1112,33 @@ collect_initial_context() {
     rv="$(gh_api_fetch_reviews "${owner}" "${repo}" "${pr}")"
     payload="$(printf '%s' "${rv}" | cut -d'|' -f2)"
     raw="$(gh_api_unb64 "${payload}")"
-    threads="$(printf '%s' "${raw}" | gh_api_unresolved_threads)"
-    if [[ -n "${threads}" ]]; then
-      out="Unresolved review threads on PR #${pr}:
+    # A null review decision means no review has been recorded, so there is no
+    # reviewer feedback to act on: do not collect unresolved threads (or the
+    # hidden-conversation hint) as work to do.
+    local decision
+    decision="$(gh_api_json_str "${raw}" "reviewDecision")"
+    if [[ "${decision}" != "null" ]]; then
+      threads="$(printf '%s' "${raw}" | gh_api_unresolved_threads)"
+      if [[ -n "${threads}" ]]; then
+        out="Unresolved review threads on PR #${pr}:
 ${threads}"
-      labels="unresolved review threads of PR #${pr}"
-    fi
-    # Count the resolved (hidden) conversations so the agent knows they exist
-    # and are already settled instead of re-reading them.
-    local resolved_count
-    resolved_count="$(printf '%s' "${raw}" | grep -oE '"isResolved"[[:space:]]*:[[:space:]]*true' | wc -l | tr -d '[:space:]')" || true
-    resolved_count="${resolved_count:-0}"
-    [[ "${resolved_count}" =~ ^[0-9]+$ ]] || resolved_count=0
-    if [[ "${resolved_count}" -gt 0 ]]; then
-      if [[ -n "${out}" ]]; then
-        out="${out}
+        labels="unresolved review threads of PR #${pr}"
+      fi
+      # Count the resolved (hidden) conversations so the agent knows they exist
+      # and are already settled instead of re-reading them.
+      local resolved_count
+      resolved_count="$(printf '%s' "${raw}" | grep -oE '"isResolved"[[:space:]]*:[[:space:]]*true' | wc -l | tr -d '[:space:]')" || true
+      resolved_count="${resolved_count:-0}"
+      [[ "${resolved_count}" =~ ^[0-9]+$ ]] || resolved_count=0
+      if [[ "${resolved_count}" -gt 0 ]]; then
+        if [[ -n "${out}" ]]; then
+          out="${out}
 
 "
+        fi
+        out="${out}Hidden (resolved) conversations: ${resolved_count} — already settled; hidden conversations are resolved (treat hidden conversations as resolved)."
+        labels="${labels:+${labels}, }hidden resolved conversations"
       fi
-      out="${out}Hidden (resolved) conversations: ${resolved_count} — already settled; hidden conversations are resolved (treat hidden conversations as resolved)."
-      labels="${labels:+${labels}, }hidden resolved conversations"
     fi
   fi
 
