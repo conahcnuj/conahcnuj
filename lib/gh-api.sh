@@ -548,9 +548,18 @@ gh_api_review_summary() {
           console.log("reviewDecision: " + (decision == null ? "NONE" : decision));
           const threads = (pr.reviewThreads && pr.reviewThreads.nodes) || [];
           const unresolved = threads.filter(t => !t.isResolved);
-          if (unresolved.length > 0) console.log("REVIEW THREADS (unresolved):");
+          let _printedHeader = false;
           for (const t of unresolved) {
             const comments = (t.comments && t.comments.nodes) || [];
+            // A thread whose last reply is by the bot itself has already been
+            // answered; do not present it again (it would only produce a
+            // duplicate reply). Re-surface it once a reviewer follows up.
+            if (comments.length > 0) {
+              const last = comments[comments.length - 1];
+              const lastAuthor = (last.author && last.author.login) || "";
+              if (/\[bot\]/.test(lastAuthor)) continue;
+            }
+            if (!_printedHeader) { console.log("REVIEW THREADS (unresolved):"); _printedHeader = true; }
             for (const c of comments) {
               const id = c.databaseId;
               const author = (c.author && c.author.login) || "unknown";
@@ -579,10 +588,12 @@ gh_api_review_summary() {
 
   local threads_part
   threads_part="$(sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p' <<<"${json}")"
-  if grep '"isResolved"[[:space:]]*:[[:space:]]*false' <<<"${threads_part}" >/dev/null; then
+  local _fmt
+  _fmt="$(gh_api_format_unresolved_threads "${json}")"
+  if [[ -n "${_fmt}" ]]; then
     echo "REVIEW THREADS (unresolved):" 2>/dev/null || true
+    printf '%s\n' "${_fmt}" 2>/dev/null || true
   fi
-  gh_api_format_unresolved_threads "${json}"
 }
 gh_api_unresolved_threads() {
   local json
@@ -607,6 +618,12 @@ gh_api_format_unresolved_threads() {
           for (const t of nodes) {
             if (t.isResolved) continue;
             const comments = (t.comments && t.comments.nodes) || [];
+            // Skip threads already answered by the bot (last comment by bot).
+            if (comments.length > 0) {
+              const last = comments[comments.length - 1];
+              const lastAuthor = (last.author && last.author.login) || "";
+              if (/\[bot\]/.test(lastAuthor)) continue;
+            }
             for (const c of comments) {
               const id = c.databaseId;
               const author = (c.author && c.author.login) || "unknown";
@@ -633,6 +650,10 @@ gh_api_format_unresolved_threads() {
 
   while IFS= read -r tn; do
     [[ -z "${tn}" ]] && continue
+    # Skip threads whose last comment is by the bot (already answered).
+    local last_author
+    last_author="$(grep -oE '"login"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${tn}" | tail -n 1 | sed -E 's/.*"login"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' 2>/dev/null || true)"
+    [[ "${last_author}" == *"[bot]"* ]] && continue
     local cn cid ca cb printed="false"
     while IFS= read -r cn; do
       [[ -z "${cn}" ]] && continue
