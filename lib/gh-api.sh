@@ -548,7 +548,7 @@ gh_api_review_summary() {
           console.log("reviewDecision: " + (decision == null ? "NONE" : decision));
           const threads = (pr.reviewThreads && pr.reviewThreads.nodes) || [];
           const unresolved = threads.filter(t => !t.isResolved);
-          let _printedHeader = false;
+          let printedHeader = false;
           for (const t of unresolved) {
             const comments = (t.comments && t.comments.nodes) || [];
             // A thread whose last reply is by the bot itself has already been
@@ -559,7 +559,7 @@ gh_api_review_summary() {
               const lastAuthor = (last.author && last.author.login) || "";
               if (/\[bot\]/.test(lastAuthor)) continue;
             }
-            if (!_printedHeader) { console.log("REVIEW THREADS (unresolved):"); _printedHeader = true; }
+            if (!printedHeader) { console.log("REVIEW THREADS (unresolved):"); printedHeader = true; }
             for (const c of comments) {
               const id = c.databaseId;
               const author = (c.author && c.author.login) || "unknown";
@@ -586,13 +586,11 @@ gh_api_review_summary() {
   decision="$(gh_api_json_str "${json}" "reviewDecision")"
   printf 'reviewDecision: %s\n' "${decision:-NONE}" 2>/dev/null || true
 
-  local threads_part
-  threads_part="$(sed -n 's/.*"reviewThreads"[[:space:]]*:[[:space:]]*{"nodes"[[:space:]]*:[[:space:]]*\(.*\)/\1/p' <<<"${json}")"
-  local _fmt
-  _fmt="$(gh_api_format_unresolved_threads "${json}")"
-  if [[ -n "${_fmt}" ]]; then
+  local fmt
+  fmt="$(gh_api_format_unresolved_threads "${json}")"
+  if [[ -n "${fmt}" ]]; then
     echo "REVIEW THREADS (unresolved):" 2>/dev/null || true
-    printf '%s\n' "${_fmt}" 2>/dev/null || true
+    printf '%s\n' "${fmt}" 2>/dev/null || true
   fi
 }
 gh_api_unresolved_threads() {
@@ -677,7 +675,13 @@ gh_api_format_unresolved_threads() {
         printf -- '- %s\n' "${bn}" 2>/dev/null || break
       done < <(grep -oE '"body":"[^"]*"' <<<"${tn}" 2>/dev/null | sed 's/"body":"//; s/"$//' 2>/dev/null || true)
     fi
-  done < <(grep -oE '\{"isResolved"[[:space:]]*:[[:space:]]*false[[:space:]]*,[[:space:]]*"comments"[[:space:]]*:[[:space:]]*\{"nodes"[[:space:]]*:[[:space:]]*\[[^]]*\]' <<<"${threads_part}" 2>/dev/null || true)
+  done < <(
+    if command -v perl >/dev/null 2>&1; then
+      perl -0777 -ne 'while (/\{"isResolved"\s*:\s*false\s*,\s*"comments"\s*:\s*\{"nodes"\s*:\s*\[.*?\]\}\}/gs) { print "$&\n" }' <<<"${threads_part}" 2>/dev/null || true
+    else
+      grep -oE '\{"isResolved"[[:space:]]*:[[:space:]]*false[[:space:]]*,[[:space:]]*"comments"[[:space:]]*:[[:space:]]*\{"nodes"[[:space:]]*:[[:space:]]*\[[^]]*\]' <<<"${threads_part}" 2>/dev/null || true
+    fi
+  )
 }
 gh_api_review_fingerprint() {
   local raw="${1}" matches="" decision=""
