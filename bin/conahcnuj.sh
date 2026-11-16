@@ -1821,7 +1821,8 @@ drive() {
       fi
       echo "TODO.jsonl still has unfinished tasks; keeping PR #${pr} a draft and continuing the work." >&2
       local todo_change="false"
-      if implement "${title}" "${body}" "The per-issue progress file TODO.jsonl is still in the working tree, so the issue is not finished and the pull request is still a draft. Continue the work one task at a time: take the first remaining task in TODO.jsonl, address it, remove its line, commit with \`git vc\`, then stop and let the driver run the next round. Empty TODO.jsonl (remove every line, but do not delete the file; the driver removes the empty file) once all tasks are addressed and the pull request is ready for review." "${base}"; then        todo_change="true"
+      if implement "${title}" "${body}" "The per-issue progress file TODO.jsonl is still in the working tree, so the issue is not finished and the pull request is still a draft. Continue the work one task at a time: take the first remaining task in TODO.jsonl, address it, remove its line, commit with \`git vc\`, then stop and let the driver run the next round. Empty TODO.jsonl (remove every line, but do not delete the file; the driver removes the empty file) once all tasks are addressed and the pull request is ready for review." "${base}"; then
+        todo_change="true"
       fi
       # Same rule as the other rounds: only a dirty tree WITH a .commit-msg is
       # committed; a failed round never crashes the driver.
