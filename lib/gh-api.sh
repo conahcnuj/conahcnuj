@@ -322,7 +322,7 @@ gh_api_fetch_pr_state() {
   if [[ "${GH_API_TEST_MODE:-0}" == "1" ]]; then
     json="$(gh_api_read_line)"
   else
-    json="$(gh_api_graphql "${query}")"
+    json="$(gh_api_graphql "${query}")" || true
   fi
 
   local state title body is_draft mergeable mss decision head base head_oid linked

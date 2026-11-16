@@ -2182,7 +2182,11 @@ resume_pr() {
       echo "PR #${pr} is closed without merge. Nothing to do." >&2
       exit 0
       ;;
-    OPEN|"") ;;
+    "")
+      echo "PR #${pr} not found (was not found, does not exist). Nothing to do." >&2
+      exit 0
+      ;;
+    OPEN) ;;
     *)
       echo "ERROR: unknown PR state: ${state}" >&2
       exit 1
