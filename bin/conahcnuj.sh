@@ -2051,6 +2051,17 @@ ${summary}"
     fi
     # The constraints pass, so the PR is ready for a human: hand it over. The
     # run does not end here; the next loop iteration waits for the verdict.
+    # A null review decision with unresolved threads (or a pending review) means
+    # the owner is mid-review: GitHub refuses a new review request with 422
+    # ("reviewDecision: null"), so do not request review and just wait for them
+    # to submit it instead of crashing the run (issue #956).
+    if [[ "${decision}" == "null" || -z "${decision}" ]] && \
+       { grep -q '"isResolved"[[:space:]]*:[[:space:]]*false' <<<"${raw}" 2>/dev/null || \
+         grep -q '"state"[[:space:]]*:[[:space:]]*"PENDING"' <<<"${raw}" 2>/dev/null; }; then
+      echo "PR #${pr}: reviewer has an unfinished (unsubmitted) review; waiting for it to be submitted." >&2
+      handed_off="true"
+      continue
+    fi
     request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
     log_review_handoff "${owner}" "${repo}" "${pr}" "${REVIEWER:-${owner}}"
     if [[ "${CI_MODE}" == "true" ]]; then
