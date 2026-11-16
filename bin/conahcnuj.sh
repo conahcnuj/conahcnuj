@@ -1958,7 +1958,6 @@ drive() {
       # TODO.jsonl once every item is addressed.
       local code_help="Address the pull request review feedback. The review feedback items are already recorded as tasks in TODO.jsonl (one JSON line per item) so the work is tracked. Address only the first unfinished task in TODO.jsonl this round: make the code change for that one task, run the repository's own validation, commit with \`git vc\`, and remove that task's line from TODO.jsonl once it is done (leave the remaining tasks). Resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
 
-
 ${summary}"
       if ! implement "${title}" "${body}" "${code_help}" "${base}"; then
         echo "No working-tree change was produced for this feedback; keeping whatever thread replies were already made." >&2
