@@ -2055,9 +2055,7 @@ ${summary}"
     # the owner is mid-review: GitHub refuses a new review request with 422
     # ("reviewDecision: null"), so do not request review and just wait for them
     # to submit it instead of crashing the run (issue #956).
-    if [[ "${decision}" == "null" || -z "${decision}" ]] && \
-       { grep -q '"isResolved"[[:space:]]*:[[:space:]]*false' <<<"${raw}" 2>/dev/null || \
-         grep -q '"state"[[:space:]]*:[[:space:]]*"PENDING"' <<<"${raw}" 2>/dev/null; }; then
+    if [[ "${decision}" == "null" || -z "${decision}" ]]; then
       echo "PR #${pr}: reviewer has an unfinished (unsubmitted) review; waiting for it to be submitted." >&2
       handed_off="true"
       continue
