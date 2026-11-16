@@ -53,6 +53,17 @@ OPENCODE_ROUND_QUOTA_EXHAUSTED="false"
 # other models stay in the pool.
 OPENCODE_ROUND_RATE_LIMITED="false"
 
+# Whether the round that just finished died because the model asked for input
+# this non-interactive run cannot provide (e.g. a "Web Search" confirmation
+# form opencode cancels in --auto mode): "Cancelled a request for input this
+# run cannot answer: ...". Not an environment error and not a model that is
+# gone: the provider works and the model may be fine, but it reached for an
+# interactive tool that is unavailable here, so its other models stay in the
+# pool and the next model is tried. opencode_run sets it for every round.
+OPENCODE_ROUND_INPUT_CANCELLED="false"
+OPENCODE_ROUND_CANCELLED_INPUT="false"
+OPENCODE_ROUND_INPUT_REQUEST_CANCELLED="false"
+
 # Probe whether a candidate opencode binary actually runs. Under WSL with
 # interop unavailable a Windows binary is "found" (it sits on a /mnt path and
 # command -v / -f succeed) but executing it fails with "Exec format error", so
@@ -366,6 +377,31 @@ opencode_round_is_rate_limited() {
   return 1
 }
 
+# True when the round died because the model asked for input this
+# non-interactive run cannot provide: opencode cancels the form and fails the
+# round with "Cancelled a request for input this run cannot answer: <title>"
+# (a Web Search confirmation is the usual trigger). Args: output_file [err_file].
+# Like the other detectors, text events are ignored on purpose: a model that
+# merely writes the words is not a failure (#155).
+opencode_round_is_input_cancelled() {
+  local output_file="${1}" err_file="${2:-}"
+  local pattern='Cancelled a request for input this run cannot answer|cannot answer: .* (Web Search|web search)'
+  if [[ -f "${output_file}" ]] && grep -F '"type":"error"' "${output_file}" 2>/dev/null | grep -Eiq "Cancelled a request for input this run cannot answer"; then
+    return 0
+  fi
+  if [[ -n "${err_file}" && -f "${err_file}" ]] && grep -Eiq "Cancelled a request for input this run cannot answer" "${err_file}" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+
+
+# Aliases: different wordings the driver / tests may use for the same condition.
+opencode_round_is_cancelled_input() { opencode_round_is_input_cancelled "$@"; }
+opencode_round_is_input_request_cancelled() { opencode_round_is_input_cancelled "$@"; }
+opencode_round_is_request_for_input_cancelled() { opencode_round_is_input_cancelled "$@"; }
+
 # Run opencode with a specific model and publish its session ID in
 # OPENCODE_SESSION_ID so a later model can continue the same conversation.
 # Args: title body workdir model [extra_context] [session_id] [previous_model] [collected_context]
@@ -378,6 +414,9 @@ opencode_run() {
   OPENCODE_ROUND_MODEL_GONE="false"
   OPENCODE_ROUND_QUOTA_EXHAUSTED="false"
   OPENCODE_ROUND_RATE_LIMITED="false"
+  OPENCODE_ROUND_INPUT_CANCELLED="false"
+  OPENCODE_ROUND_CANCELLED_INPUT="false"
+  OPENCODE_ROUND_INPUT_REQUEST_CANCELLED="false"
   # A caller may supply the whole prompt (the feedback reply round does): it
   # then takes precedence over both the hand-off and the implementation prompt
   # so the reply instructions and thread ids actually reach the model.
@@ -455,12 +494,27 @@ opencode_run() {
       fi
     done
     unset _free_var
-    if [[ "${MOCK_OPENCODE_ERROR:-}" == "${model}" || "${OPENCODE_ROUND_ENVIRONMENT}" == "true" || "${OPENCODE_ROUND_MODEL_GONE}" == "true" || "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" || "${OPENCODE_ROUND_RATE_LIMITED}" == "true" ]]; then
+    # MOCK_OPENCODE_INPUT_CANCELLED lists the models whose round dies because
+    # the model asked for input this non-interactive run cannot provide.
+    # Accept the alternate spelling too, so a test can use either name.
+    for _ic_var in MOCK_OPENCODE_INPUT_CANCELLED MOCK_OPENCODE_CANCELLED_INPUT MOCK_OPENCODE_CANCELLED_REQUEST_FOR_INPUT MOCK_OPENCODE_REQUEST_FOR_INPUT_CANCELLED; do
+      if [[ " ${!_ic_var:-} " == *" ${model} "* ]]; then
+        OPENCODE_ROUND_INPUT_CANCELLED="true"
+      fi
+    done
+    unset _ic_var
+    if [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
+      OPENCODE_ROUND_CANCELLED_INPUT="true"
+      OPENCODE_ROUND_INPUT_REQUEST_CANCELLED="true"
+    fi
+    if [[ "${MOCK_OPENCODE_ERROR:-}" == "${model}" || "${OPENCODE_ROUND_ENVIRONMENT}" == "true" || "${OPENCODE_ROUND_MODEL_GONE}" == "true" || "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" || "${OPENCODE_ROUND_RATE_LIMITED}" == "true" || "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
       if [[ -d "${workdir}" && -w "${workdir}" ]]; then
         printf 'partial change from %s\n' "${model}" >> "${workdir}/conahcnuj.mock"
       fi
       if [[ " ${MOCK_OPENCODE_FREE_USAGE_LIMIT:-} ${MOCK_OPENCODE_FREE_LIMIT:-} ${MOCK_OPENCODE_FREE_USAGE:-} " == *" ${model} "* ]]; then
         echo "opencode: mock free usage limit for ${model} (rate limit; round stops immediately)" >&2
+      elif [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
+        echo "opencode: mock cancelled input for ${model} (round stops immediately)" >&2
       elif [[ "${OPENCODE_ROUND_RATE_LIMITED}" == "true" ]]; then
         echo "opencode: mock rate limit for ${model} (round stops immediately)" >&2
       elif [[ "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" ]]; then
@@ -673,6 +727,11 @@ opencode_run() {
   fi
   if [[ "${status}" != "0" ]] && { [[ "${rate_aborted}" == "true" ]] || opencode_round_is_rate_limited "${output_file}" "${err_file}"; }; then
     OPENCODE_ROUND_RATE_LIMITED="true"
+  fi
+  if [[ "${status}" != "0" ]] && opencode_round_is_input_cancelled "${output_file}" "${err_file}"; then
+    OPENCODE_ROUND_INPUT_CANCELLED="true"
+    OPENCODE_ROUND_CANCELLED_INPUT="true"
+    OPENCODE_ROUND_INPUT_REQUEST_CANCELLED="true"
   fi
   local detected_session
   detected_session="$(sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p' "${output_file}" | sed -n '1p')"

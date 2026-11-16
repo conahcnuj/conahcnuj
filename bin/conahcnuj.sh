@@ -1331,6 +1331,8 @@ implement() {
           echo "Model ${model} failed before completing the work: environment error (provider unreachable or credentials rejected); giving up on provider ${provider} for the rest of this run." >&2
         elif [[ "${OPENCODE_ROUND_RATE_LIMITED}" == "true" ]]; then
           echo "Model ${model} hit a rate limit; trying the next model without waiting for the retry." >&2
+        elif [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" || "${OPENCODE_ROUND_CANCELLED_INPUT}" == "true" || "${OPENCODE_ROUND_INPUT_REQUEST_CANCELLED}" == "true" ]]; then
+          echo "Model ${model} failed before completing the work: cancelled a request for input this run cannot answer; handing off to the next model." >&2
         else
           echo "Model ${model} failed before completing the work; handing off to the next model." >&2
         fi
