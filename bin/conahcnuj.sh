@@ -1836,13 +1836,13 @@ drive() {
     # real PR. Only the driver lifts the draft, never the agent, and only once
     # the branch head has no unfinished task line. An empty file is done but
     # must not land on main, so remove it before the hand-off.
-    remove_empty_todo
-
     if [[ "${pr_draft}" == "true" ]]; then
       echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
       gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
       pr_draft="false"
     fi
+
+    remove_empty_todo
 
     # --- review feedback phase ---
     # Address the review feedback (open threads / requested changes) BEFORE
