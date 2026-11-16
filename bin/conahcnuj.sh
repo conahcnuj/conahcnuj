@@ -1892,7 +1892,7 @@ drive() {
       # "Addressed the review feedback" comment: the in-thread replies are how
       # the reviewer learns what happened. Because the fingerprint drops
       # bot-authored comments, those replies never look like fresh feedback.
-      local code_help="Address the pull request review feedback. Make the code changes, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
+      local code_help="Address the pull request review feedback. Make the code changes, run the repository's own validation, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
 
 ${summary}"
       if ! implement "${title}" "${body}" "${code_help}" "${base}"; then
@@ -1920,7 +1920,7 @@ ${summary}"
       # Checks pass and the branch merges: now it is safe to reply in the
       # review threads (push -> CI -> comment -> request review). The reply
       # round uses a prompt override so the thread ids reach the model.
-      local reply_prompt="The pull request branch has been updated and every check passes with no merge conflict. Reply in each unresolved review thread below, saying what you changed or answering the question. Post the reply with the GitHub API (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies is the reply endpoint; \${GH_TOKEN} is set) using the comment id shown for each thread. Do not make code changes, do not commit, and do not request review.
+      local reply_prompt="The pull request branch has been updated and every check passes with no merge conflict. Reply in each unresolved review thread below with one short, factual reply per thread (what changed or the answer to the question). Post it through the GitHub API (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies is the reply endpoint; \${GH_TOKEN} is set) using the comment id shown for each thread. Do not make code changes, do not commit, and do not request review.
 
 ${summary}"
       if ! implement "${title}" "${body}" "" "${base}" "${reply_prompt}"; then
@@ -2013,7 +2013,7 @@ ${summary}"
     # conflict-free, before handing the PR back (push -> CI -> comment ->
     # request review).
     if [[ "${reply_pending}" == "true" ]]; then
-      local reply_prompt="The pull request branch has been updated and every check passes with no merge conflict. Reply in each unresolved review thread below, saying what you changed or answering the question. Post the reply with the GitHub API (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies is the reply endpoint; \${GH_TOKEN} is set) using the comment id shown for each thread. Do not make code changes, do not commit, and do not request review.
+      local reply_prompt="The pull request branch has been updated and every check passes with no merge conflict. Reply in each unresolved review thread below with one short, factual reply per thread (what changed or the answer to the question). Post it through the GitHub API (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies is the reply endpoint; \${GH_TOKEN} is set) using the comment id shown for each thread. Do not make code changes, do not commit, and do not request review.
 
 ${summary}"
       if ! implement "${title}" "${body}" "" "${base}" "${reply_prompt}"; then
