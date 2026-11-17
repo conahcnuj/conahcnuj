@@ -1913,6 +1913,29 @@ drive() {
       conflict_fix_pushed="false"
       reply_pending="true"
       echo "New review feedback detected; addressing it." >&2
+      # Track the review findings as TODO entries so the work stays a draft
+      # until they are resolved (instead of being done with no TODO.jsonl).
+      # The driver owns the progress file's lifecycle, so it seeds it here;
+      # the coding agent keeps the lines current and empties the file when the
+      # findings are addressed.
+      local review_threads
+      review_threads="$(printf '%s' "${raw}" | gh_api_unresolved_threads)"
+      if [[ -n "${review_threads}" ]]; then
+        if [[ ! -f "TODO.jsonl" ]] || ! grep -q '[^[:space:]]' "TODO.jsonl" 2>/dev/null; then
+          : > TODO.jsonl
+          while IFS= read -r _thread_line; do
+            [[ -z "${_thread_line}" ]] && continue
+            python3 -c 'import json,sys; print(json.dumps({"task": sys.argv[1]}))' "${_thread_line}" >> TODO.jsonl
+          done <<<"${review_threads}"
+          echo "Added review findings to TODO.jsonl." >&2
+        fi
+      fi
+      # Keep the PR a draft while the findings are being addressed.
+      if [[ "${pr_draft}" != "true" ]]; then
+        echo "Work resuming after review feedback; converting PR #${pr} back to a draft." >&2
+        gh_api_convert_pr_to_draft "${owner}" "${repo}" "${pr}" || echo "WARNING: could not convert PR #${pr} back to a draft; continuing." >&2
+        pr_draft="true"
+      fi
       # The coding agent answers the reviewer in the thread itself (the reply
       # endpoint and every thread comment id are in the summary), besides any
       # code change the feedback asks for. The driver no longer posts its own
@@ -1955,6 +1978,17 @@ ${summary}"
       fi
       rm -f .commit-msg
       reply_pending="false"
+      # The findings were addressed this round (checks passed and the thread
+      # replies were posted), so the seeded TODO entries are done: empty and
+      # remove the progress file so it never reaches main.
+      if [[ -f "TODO.jsonl" ]]; then
+        : > TODO.jsonl
+      fi
+      remove_empty_todo
+      if [[ "${pr_draft}" == "true" ]]; then
+        gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
+        pr_draft="false"
+      fi
       request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
       log_review_handoff "${owner}" "${repo}" "${pr}" "${REVIEWER:-${owner}}"
       if [[ "${CI_MODE}" == "true" ]]; then
