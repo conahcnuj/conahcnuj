@@ -437,15 +437,19 @@ opencode_run() {
   # from the same source the driver uses, so it is inherited by opencode's
   # child shells regardless of the plugin's state (#1311).
   if [[ "${OPENCODE_TEST_MODE:-0}" == "1" ]]; then
-    : "${GH_TOKEN:=test-token}"
-    : "${GITHUB_TOKEN:=${GH_TOKEN}}"
+    # Override any ambient/stale value (mirrors the plugin, which always issues
+    # the App token instead of trusting a pre-existing GH_TOKEN).
+    GH_TOKEN="test-token"
+    GITHUB_TOKEN="test-token"
   else
-    if [[ -z "${GH_TOKEN:-}" ]]; then
-      local fetched_token
-      fetched_token="$(bash "${OPENCODE_LIB_DIR}/../gh-app/get-token.sh" 2>/dev/null || true)"
-      if [[ -n "${fetched_token}" ]]; then
-        GH_TOKEN="${fetched_token}"
-      fi
+    # Always issue the App installation token, ignoring an ambient GH_TOKEN:
+    # a stale/invalid ambient token must not survive into the agent's shells
+    # (that is exactly what made `gh auth status` report an invalid token).
+    local fetched_token
+    fetched_token="$(bash "${OPENCODE_LIB_DIR}/../gh-app/get-token.sh" 2>/dev/null || true)"
+    if [[ -n "${fetched_token}" ]]; then
+      GH_TOKEN="${fetched_token}"
+      GITHUB_TOKEN="${fetched_token}"
     fi
   fi
   export GH_TOKEN

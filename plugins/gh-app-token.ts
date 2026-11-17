@@ -495,6 +495,12 @@ async function injectShellEnv(
     // of a stale/ambient one. Only set when a token is available; never copy
     // an ambient value (avoids disclosing that secret to the model).
     env.GITHUB_TOKEN = token
+  } else {
+    // No App token available: drop any ambient GH_TOKEN/GITHUB_TOKEN so a
+    // stale/invalid token cannot survive into the agent's shells and make
+    // `gh auth status` report an invalid token (issue #964).
+    delete env.GH_TOKEN
+    delete env.GITHUB_TOKEN
   }
 
   // GIT_CONFIG_*: force every git operation in this project to use the App identity.
