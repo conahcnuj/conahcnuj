@@ -438,6 +438,7 @@ opencode_run() {
   # child shells regardless of the plugin's state (#1311).
   if [[ "${OPENCODE_TEST_MODE:-0}" == "1" ]]; then
     : "${GH_TOKEN:=test-token}"
+    : "${GITHUB_TOKEN:=${GH_TOKEN}}"
   else
     if [[ -z "${GH_TOKEN:-}" ]]; then
       local fetched_token
@@ -448,6 +449,11 @@ opencode_run() {
     fi
   fi
   export GH_TOKEN
+  # Keep GITHUB_TOKEN in sync so tools reading either name see the same token.
+  if [[ -z "${GITHUB_TOKEN:-}" || "${GITHUB_TOKEN:-}" != "${GH_TOKEN}" ]]; then
+    GITHUB_TOKEN="${GH_TOKEN}"
+  fi
+  export GITHUB_TOKEN
 
   if [[ "${OPENCODE_TEST_MODE:-0}" == "1" ]]; then
     local _mv

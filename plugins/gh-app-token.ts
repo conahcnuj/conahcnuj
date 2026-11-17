@@ -490,6 +490,11 @@ async function injectShellEnv(
   // output).
   if (token) {
     env.GH_TOKEN = token
+    // Keep GITHUB_TOKEN in sync so tools that read either name (gh, GitHub
+    // Actions-style tooling, ...) see the same App installation token instead
+    // of a stale/ambient one. Only set when a token is available; never copy
+    // an ambient value (avoids disclosing that secret to the model).
+    env.GITHUB_TOKEN = token
   }
 
   // GIT_CONFIG_*: force every git operation in this project to use the App identity.
