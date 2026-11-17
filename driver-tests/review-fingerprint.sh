@@ -27,6 +27,13 @@ echo "empty reviews / REVIEW_REQUIRED -> empty: passed"
 [[ -z "$(gh_api_review_fingerprint "${NO_DECISION}")" ]] || fail "empty reviews / no decision must fingerprint empty"
 echo "empty reviews / no decision -> empty: passed"
 
+# A null review decision with unresolved conversations still on the PR must
+# fingerprint empty: no review has been recorded, so those threads are not
+# feedback to act on (and must not fire a spurious implementation round).
+NULL_WITH_THREADS='{"data":{"repository":{"pullRequest":{"reviewDecision":null,"reviews":{"nodes":[]},"comments":{"nodes":[]},"reviewThreads":{"nodes":[{"isResolved":false,"comments":{"nodes":[{"databaseId":7,"body":"Please write tests","author":{"login":"reviewer"}}]}}]}}}}}'
+[[ -z "$(gh_api_review_fingerprint "${NULL_WITH_THREADS}")" ]] || fail "null decision with unresolved threads must fingerprint empty"
+echo "null decision with unresolved threads -> empty: passed"
+
 [[ -n "$(gh_api_review_fingerprint "${CHANGES_EMPTY_BODY}")" ]] || fail "CHANGES_REQUESTED with empty body must fingerprint non-empty"
 echo "CHANGES_REQUESTED with empty body -> non-empty: passed"
 
