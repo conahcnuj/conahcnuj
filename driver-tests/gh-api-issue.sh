@@ -83,6 +83,7 @@ MOCK_CONDITIONS_REAL='{"data":{"repository":{"pullRequest":{"mergeable":"MERGEAB
 MOCK_CONDITIONS_DEADLOCK='{"data":{"repository":{"pullRequest":{"mergeable":"MERGEABLE","mergeStateStatus":"BLOCKED","state":"OPEN","commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"FAILURE","contexts":{"nodes":[{"__typename":"CheckRun","name":"enable / enable","status":"COMPLETED","conclusion":"FAILURE","checkSuite":{"workflowRun":{"workflow":{"name":"Owner-approved auto-merge"}}}},{"__typename":"CheckRun","name":"CodeQL","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":null},{"__typename":"CheckRun","name":"Lint shell scripts (windows-latest)","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},{"__typename":"CheckRun","name":"Check install.ps1 syntax","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},{"__typename":"CheckRun","name":"Mock tests (no secrets / no network) (ubuntu-latest)","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},{"__typename":"CheckRun","name":"Plugin runtime smoke test (windows-latest)","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},{"__typename":"CheckRun","name":"E2E opencode run (opencode free model)","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},{"__typename":"CheckRun","name":"Typecheck opencode plugin","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},{"__typename":"CheckRun","name":"Plugin runtime smoke test (ubuntu-latest)","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},{"__typename":"CheckRun","name":"Mock tests (no secrets / no network) (windows-latest)","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},{"__typename":"CheckRun","name":"Lint shell scripts (ubuntu-latest)","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},{"__typename":"CheckRun","name":"install.ps1 deployment test","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},{"__typename":"CheckRun","name":"Attempt to resolve issue","status":"IN_PROGRESS","conclusion":null,"checkSuite":{"workflowRun":{"workflow":{"name":"Issue auto-drive"}}}},{"__typename":"CheckRun","name":"Analyze (actions)","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CodeQL"}}}},{"__typename":"CheckRun","name":"Analyze (javascript-typescript)","status":"COMPLETED","conclusion":"SUCCESS","checkSuite":{"workflowRun":{"workflow":{"name":"CodeQL"}}}}],"pageInfo":{"hasNextPage":false}}}}}]}}}}}'
 
 MOCK_REVIEWS='{"data":{"repository":{"pullRequest":{"reviewDecision":"CHANGES_REQUESTED","reviews":{"nodes":[{"state":"CHANGES_REQUESTED","body":"Please fix the typo","author":{"login":"reviewer"}}]},"comments":{"nodes":[{"body":"Nice work so far!","author":{"login":"reviewer"}}]},"reviewThreads":{"nodes":[{"isResolved":false,"comments":{"nodes":[{"body":"Inline note on line 10"}]}},{"isResolved":true,"comments":{"nodes":[{"body":"Resolved thread"}]}}]}}}}}'
+MOCK_REVIEWS_NULL='{"data":{"repository":{"pullRequest":{"reviewDecision":null,"reviews":{"nodes":[]},"comments":{"nodes":[]},"reviewThreads":{"nodes":[{"isResolved":false,"comments":{"nodes":[{"databaseId":101,"body":"Inline note on line 10","author":{"login":"reviewer"}}]}}]}}}}}'
 
 MOCK_PR_BY_HEAD_EMPTY='{"data":{"repository":{"pullRequests":{"nodes":[]}}}}'
 
@@ -296,6 +297,16 @@ test_review_summary() {
   [[ "${summary}" != *"Resolved thread"* ]]
   [[ "${summary}" != *"Please fix the typo"* ]]
   [[ "${summary}" != *"Nice work so far!"* ]]
+}
+
+test_review_summary_null() {
+  local summary
+  summary="$(printf '%s\n' "${MOCK_REVIEWS_NULL}" | gh_api_review_summary)"
+  # A null review decision means no review has been recorded: do not surface
+  # unresolved conversations (or a "REVIEW THREADS" section) as work to do.
+  [[ "${summary}" == *"reviewDecision: NONE"* ]]
+  [[ "${summary}" != *"REVIEW THREADS (unresolved):"* ]]
+  [[ "${summary}" != *"Inline note on line 10"* ]]
 }
 
 test_find_pr_by_head() {
@@ -582,6 +593,7 @@ test_fetch_pr_state
 test_fetch_pr_conditions
 test_fetch_reviews
 test_review_summary
+test_review_summary_null
 test_find_pr_by_head
 test_create_pr
 test_update_pr
