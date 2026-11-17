@@ -394,7 +394,7 @@ workdir_changed() {
 # Whether the per-issue progress file TODO.jsonl still has outstanding tasks.
 # The driver owns the file's lifecycle: it creates the initial placeholder
 # (as the commit anchor for the early draft PR), keys the PR's draft state on
-# it, removes the empty file before hand-off and requests review. The coding
+# it, removes the empty file (if the agent left one) before hand-off and requests review. The coding
 # agent only keeps the task lines current -- it adds/removes entries and
 # empties the file (removes every line) once the issue is resolved, but does
 # not create or delete the file itself. Its
@@ -1838,7 +1838,7 @@ drive() {
       fi
       echo "TODO.jsonl still has unfinished tasks; keeping PR #${pr} a draft and continuing the work." >&2
       local todo_change="false"
-      if implement "${title}" "${body}" "The per-issue progress file TODO.jsonl is still in the working tree, so the issue is not finished and the pull request is still a draft. Continue the work, keep TODO.jsonl current, and empty it (remove every line, but do not delete the file; the driver removes the empty file) once the issue is fully resolved and the pull request is ready for review." "${base}"; then
+      if implement "${title}" "${body}" "The per-issue progress file TODO.jsonl is still in the working tree, so the issue is not finished and the pull request is still a draft. Continue the work, keep TODO.jsonl current, and empty it (remove every line, or delete the file) once the issue is fully resolved and the pull request is ready for review." "${base}"; then
         todo_change="true"
       fi
       # Same rule as the other rounds: only a dirty tree WITH a .commit-msg is
