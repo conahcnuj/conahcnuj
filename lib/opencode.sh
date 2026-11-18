@@ -436,18 +436,41 @@ opencode_run() {
   # GitHub API call the agent makes would see an empty token. Export it here
   # from the same source the driver uses, so it is inherited by opencode's
   # child shells regardless of the plugin's state (#1311).
-  if [[ "${OPENCODE_TEST_MODE:-0}" == "1" ]]; then
-    : "${GH_TOKEN:=test-token}"
+  if [[ "${OPENCODE_TEST_MODE:-0}" == "1" || "${CONAHCNUJ_TEST_MODE:-0}" == "1" ]]; then
+    # Override any ambient/stale value (mirrors the plugin, which always issues
+    # the App token instead of trusting a pre-existing GH_TOKEN).
+    GH_TOKEN="test-token"
+    GITHUB_TOKEN="test-token"
   else
-    if [[ -z "${GH_TOKEN:-}" ]]; then
-      local fetched_token
-      fetched_token="$(bash "${OPENCODE_LIB_DIR}/../gh-app/get-token.sh" 2>/dev/null || true)"
-      if [[ -n "${fetched_token}" ]]; then
-        GH_TOKEN="${fetched_token}"
-      fi
+    # Always issue the App installation token, ignoring an ambient GH_TOKEN:
+    # a stale/invalid ambient token must not survive into the agent's shells
+    # (that is exactly what made `gh auth status` report an invalid token).
+    local fetched_token
+    fetched_token="$(bash "${OPENCODE_LIB_DIR}/../gh-app/get-token.sh" 2>/dev/null || true)"
+    if [[ -n "${fetched_token}" ]]; then
+      GH_TOKEN="${fetched_token}"
+      GITHUB_TOKEN="${fetched_token}"
+    else
+      # No App token available: drop any ambient GH_TOKEN/GITHUB_TOKEN so a
+      # stale/invalid token cannot survive into the agent's shells and make
+      # `gh auth status` report an invalid token (issue #964).
+      unset GH_TOKEN GITHUB_TOKEN
     fi
   fi
-  export GH_TOKEN
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    export GH_TOKEN
+  else
+    unset GH_TOKEN
+  fi
+  # Keep GITHUB_TOKEN in sync so tools reading either name see the same token.
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    if [[ -z "${GITHUB_TOKEN:-}" || "${GITHUB_TOKEN:-}" != "${GH_TOKEN}" ]]; then
+      GITHUB_TOKEN="${GH_TOKEN}"
+    fi
+    export GITHUB_TOKEN
+  else
+    unset GITHUB_TOKEN
+  fi
 
   if [[ "${OPENCODE_TEST_MODE:-0}" == "1" ]]; then
     local _mv

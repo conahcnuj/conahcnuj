@@ -374,6 +374,7 @@ test("shell.env: publishes the App identity, the alias.vc wrapper and nothing el
   // No private key and no token cache in the stage, so no token is issued -
   // and nothing asked the network for one.
   assert.strictEqual(output.env.GH_TOKEN, undefined)
+  assert.strictEqual(output.env.GITHUB_TOKEN, undefined)
   assert.strictEqual(fetchCalls.length, 0)
   for (const key of Object.keys(output.env)) {
     assert.ok(
@@ -496,7 +497,20 @@ test("shell.env: a cached installation token is published without any network", 
   const output = { env: {} }
   await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
   assert.strictEqual(output.env.GH_TOKEN, "ghs_cached")
+  // GITHUB_TOKEN mirrors GH_TOKEN so tools reading either name (gh, GitHub
+  // Actions-style tooling) authenticate as the App; gh auth status succeeds.
+  assert.strictEqual(output.env.GITHUB_TOKEN, "ghs_cached")
   assert.strictEqual(fetchCalls.length, 0)
+
+  // A consumer (gh) running under the published env authenticates as the App:
+  // mock the `gh auth status` check the review asks for, offline.
+  const mockGh = path.join(STAGE_DIR, "mock-gh.js")
+  fs.writeFileSync(mockGh, "process.exit(process.env.GH_TOKEN === 'ghs_cached' && process.env.GITHUB_TOKEN === 'ghs_cached' ? 0 : 1)\n")
+  const res = spawnSync(process.execPath, [mockGh], {
+    env: { ...process.env, ...output.env },
+    encoding: "utf8",
+  })
+  assert.strictEqual(res.status, 0, `mock gh auth status failed: ${res.stderr}`)
 })
 
 test("shell.env: expired or malformed token caches are ignored, still no network", async () => {
@@ -515,6 +529,7 @@ test("shell.env: expired or malformed token caches are ignored, still no network
     const output = { env: {} }
     await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
     assert.strictEqual(output.env.GH_TOKEN, undefined, `for ${name}`)
+    assert.strictEqual(output.env.GITHUB_TOKEN, undefined, `for ${name}`)
     // The staged key file does not exist, so issuance stops before any
     // request is made.
     assert.strictEqual(fetchCalls.length, 0, `network call for ${name}`)
@@ -535,6 +550,7 @@ test("shell.env: issues a signed token, caches it and never sends the key twice"
   const first = { env: {} }
   await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, first)
   assert.strictEqual(first.env.GH_TOKEN, TOKEN)
+  assert.strictEqual(first.env.GITHUB_TOKEN, TOKEN)
   assert.strictEqual(fetchCalls.length, 1)
 
   // The request itself: right endpoint, and a JWT the staged key really
@@ -554,6 +570,7 @@ test("shell.env: issues a signed token, caches it and never sends the key twice"
   const second = { env: {} }
   await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, second)
   assert.strictEqual(second.env.GH_TOKEN, TOKEN)
+  assert.strictEqual(second.env.GITHUB_TOKEN, TOKEN)
   assert.strictEqual(fetchCalls.length, 1)
 
   // ...and a fresh run picks the written cache up instead of exchanging again.
@@ -561,6 +578,7 @@ test("shell.env: issues a signed token, caches it and never sends the key twice"
   const third = { env: {} }
   await reloaded["shell.env"]({ cwd: ".", sessionID: "s1" }, third)
   assert.strictEqual(third.env.GH_TOKEN, TOKEN)
+  assert.strictEqual(third.env.GITHUB_TOKEN, TOKEN)
   assert.strictEqual(fetchCalls.length, 1)
 })
 
@@ -581,6 +599,7 @@ test("shell.env: resolves the MSYS-style private key path install.ps1 deploys", 
   const output = { env: {} }
   await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
   assert.strictEqual(output.env.GH_TOKEN, TOKEN)
+  assert.strictEqual(output.env.GITHUB_TOKEN, TOKEN)
 })
 
 test("shell.env: a failed exchange degrades to no GH_TOKEN", async () => {
@@ -601,9 +620,23 @@ test("shell.env: a failed exchange degrades to no GH_TOKEN", async () => {
     const output = { env: {} }
     await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
     assert.strictEqual(output.env.GH_TOKEN, undefined, `for ${name}`)
+    assert.strictEqual(output.env.GITHUB_TOKEN, undefined, `for ${name}`)
     assert.strictEqual(fs.existsSync(TOKEN_CACHE), false, `cache written for ${name}`)
     assert.strictEqual(fetchCalls.length, 1, `for ${name}`)
   }
+})
+
+test("shell.env: a stale ambient GH_TOKEN/GITHUB_TOKEN is dropped when no App token is issued", async () => {
+  // An ambient (stale/invalid) token must not survive into the agent's shells,
+  // otherwise `gh auth status` reports an invalid token (issue #964). The
+  // plugin drops both names when no App installation token can be issued.
+  stage()
+  const plugin = await freshHooks()
+  const output = { env: { GH_TOKEN: "stale-ambient", GITHUB_TOKEN: "stale-ambient" } }
+  await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
+  assert.strictEqual(output.env.GH_TOKEN, undefined)
+  assert.strictEqual(output.env.GITHUB_TOKEN, undefined)
+  assert.strictEqual(fetchCalls.length, 0)
 })
 
 test("shell.env: an unusable expires_at falls back to a short cache lifetime", async () => {
@@ -638,6 +671,7 @@ test("shell.env: unusable exchange config never reaches the network", async () =
     const output = { env: {} }
     await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
     assert.strictEqual(output.env.GH_TOKEN, undefined, `for ${name}`)
+    assert.strictEqual(output.env.GITHUB_TOKEN, undefined, `for ${name}`)
     assert.strictEqual(fetchCalls.length, 0, `network call for ${name}`)
   }
 })

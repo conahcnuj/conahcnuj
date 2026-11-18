@@ -99,6 +99,20 @@ USER_COMMIT_MODEL="${CONAHCNUJ_COMMIT_MODEL:-}"
 # shellcheck source=lib/opencode.sh
 . "${HERE}/../lib/opencode.sh"
 
+# Export the App installation token as GH_TOKEN/GITHUB_TOKEN so `gh` (and any
+# subprocess, including the coding agent) authenticates as the App instead of
+# an ambient/stale token: that is what makes `gh auth status` succeed
+# (issue #964). Drop any ambient value when no token can be issued, mirroring
+# the plugin, so a stale token cannot survive.
+_driver_token="$(gh_api_get_token 2>/dev/null || true)"
+if [[ -n "${_driver_token}" ]]; then
+  export GH_TOKEN="${_driver_token}"
+  export GITHUB_TOKEN="${_driver_token}"
+else
+  unset GH_TOKEN GITHUB_TOKEN
+fi
+unset _driver_token
+
 if [[ "${TEST_MODE}" == "1" ]]; then
   # Offline tests must not sleep.
   rate_limit_poll_sleep() { :; }
