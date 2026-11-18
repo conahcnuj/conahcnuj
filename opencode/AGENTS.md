@@ -29,12 +29,12 @@
 - 自然と `git vc` を使うことを心がける（`git commit` の代わりに `git vc` を選ぶ）。
 - コミットを求められていないタスクでは、コミットせず作業ツリーに変更を残す。
 
-## GitHub CLI / API は認証済み（`GH_TOKEN`）
+## GitHub CLI / API は認証済み（`GH_TOKEN` / `GITHUB_TOKEN`）
 
 - **`gh` と GitHub API は conahcnuj のプラグインが認証済みにする。** セッションが
-  起動する各シェルには GitHub App のインストールトークンが `GH_TOKEN` として
-  設定されているので、`gh api ...` などをそのまま実行すれば App 名義で動く。
-- **`GH_TOKEN` を自分で export しないこと。`gh-app/get-token.sh` を実行して
+  起動する各シェルには GitHub App のインストールトークンが `GH_TOKEN` / `GITHUB_TOKEN`
+  として設定されているので、`gh api ...` などをそのまま実行すれば App 名義で動く。
+- **`GH_TOKEN` / `GITHUB_TOKEN` を自分で export しないこと。`gh-app/get-token.sh` を実行して
   トークンを取り直す必要もない。** トークンはプラグインがシェルごとに（期限が
   切れていれば更新して）注入するので、自分で用意すると冗長で壊れやすい。
 
