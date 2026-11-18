@@ -1858,7 +1858,43 @@ drive() {
     # real PR. Only the driver lifts the draft, never the agent, and only once
     # the branch head has no unfinished task line. An empty file is done but
     # must not land on main, so remove it before the hand-off.
-    if [[ "${pr_draft}" == "true" ]]; then
+    # Check review feedback BEFORE lifting the draft: a PR that still has new
+    # review feedback must stay a draft while it is addressed, so marking it
+    # ready only to convert it back to a draft a few lines later is pointless
+    # noise (issue #970).
+    local rv decision payload raw summary sig actionable has_new_feedback
+    rv="$(gh_api_fetch_reviews "${owner}" "${repo}" "${pr}")"
+    decision="$(printf '%s' "${rv}" | cut -d'|' -f1)"
+    payload="$(printf '%s' "${rv}" | cut -d'|' -f2)"
+    raw="$(gh_api_unb64 "${payload}")"
+    summary="$(printf '%s' "${raw}" | gh_api_review_summary)"
+    sig="$(gh_api_review_fingerprint "${raw}")"
+    echo "reviewDecision: ${decision:-NONE}" >&2
+
+    if [[ "${decision}" == "APPROVED" ]]; then
+      if [[ "${pr_draft}" == "true" ]]; then
+        echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
+        gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
+        pr_draft="false"
+      fi
+      remove_empty_todo
+      echo "Ready to merge: https://github.com/${owner}/${repo}/pull/${pr}" >&2
+      exit 0
+    fi
+
+    actionable="false"
+    if [[ "${decision}" != "null" && -n "${decision}" ]]; then
+      case "${decision}" in
+        CHANGES_REQUESTED|COMMENTED|REVIEW_REQUIRED|"") actionable="true" ;;
+      esac
+    fi
+
+    has_new_feedback="false"
+    if [[ "${actionable}" == "true" && -n "${sig}" && "${sig}" != "${last_sig}" ]]; then
+      has_new_feedback="true"
+    fi
+
+    if [[ "${pr_draft}" == "true" && "${has_new_feedback}" != "true" ]]; then
       echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
       gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
       pr_draft="false"
@@ -1880,31 +1916,11 @@ drive() {
     # verdict instead of stopping. An approval ends the run (the merge workflow
     # chains off it); new feedback loops back into this phase to be addressed;
     # while nothing changes it waits, below, without re-asking.
-    local rv decision payload raw summary sig actionable
-    rv="$(gh_api_fetch_reviews "${owner}" "${repo}" "${pr}")"
-    decision="$(printf '%s' "${rv}" | cut -d'|' -f1)"
-    payload="$(printf '%s' "${rv}" | cut -d'|' -f2)"
-    raw="$(gh_api_unb64 "${payload}")"
-    summary="$(printf '%s' "${raw}" | gh_api_review_summary)"
-    sig="$(gh_api_review_fingerprint "${raw}")"
-    echo "reviewDecision: ${decision:-NONE}" >&2
+    # Review data and the actionable/new-feedback decision were collected above
+    # (before the draft was lifted), so the PR is not marked ready only to be
+    # converted back to a draft when review feedback is pending (issue #970).
 
-    if [[ "${decision}" == "APPROVED" ]]; then
-      echo "Ready to merge: https://github.com/${owner}/${repo}/pull/${pr}" >&2
-      exit 0
-    fi
-
-    actionable="false"
-    # A null review decision means no review has been recorded: there is no
-    # reviewer feedback to act on, so it must never be treated as actionable
-    # (otherwise the agent gets sent to "address feedback" that does not exist).
-    if [[ "${decision}" != "null" && -n "${decision}" ]]; then
-      case "${decision}" in
-        CHANGES_REQUESTED|COMMENTED|REVIEW_REQUIRED|"") actionable="true" ;;
-      esac
-    fi
-
-    if [[ "${actionable}" == "true" && -n "${sig}" && "${sig}" != "${last_sig}" ]]; then
+    if [[ "${has_new_feedback}" == "true" ]]; then
       last_sig="${sig}"
       # A fresh round invalidates the previous hand-off: the owner has to be
       # asked again once this round's work passes the constraints, and until
