@@ -450,14 +450,27 @@ opencode_run() {
     if [[ -n "${fetched_token}" ]]; then
       GH_TOKEN="${fetched_token}"
       GITHUB_TOKEN="${fetched_token}"
+    else
+      # No App token available: drop any ambient GH_TOKEN/GITHUB_TOKEN so a
+      # stale/invalid token cannot survive into the agent's shells and make
+      # `gh auth status` report an invalid token (issue #964).
+      unset GH_TOKEN GITHUB_TOKEN
     fi
   fi
-  export GH_TOKEN
-  # Keep GITHUB_TOKEN in sync so tools reading either name see the same token.
-  if [[ -z "${GITHUB_TOKEN:-}" || "${GITHUB_TOKEN:-}" != "${GH_TOKEN}" ]]; then
-    GITHUB_TOKEN="${GH_TOKEN}"
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    export GH_TOKEN
+  else
+    unset GH_TOKEN
   fi
-  export GITHUB_TOKEN
+  # Keep GITHUB_TOKEN in sync so tools reading either name see the same token.
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    if [[ -z "${GITHUB_TOKEN:-}" || "${GITHUB_TOKEN:-}" != "${GH_TOKEN}" ]]; then
+      GITHUB_TOKEN="${GH_TOKEN}"
+    fi
+    export GITHUB_TOKEN
+  else
+    unset GITHUB_TOKEN
+  fi
 
   if [[ "${OPENCODE_TEST_MODE:-0}" == "1" ]]; then
     local _mv
