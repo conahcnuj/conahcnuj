@@ -1946,12 +1946,12 @@ drive() {
           echo "Added review findings to TODO.jsonl." >&2
         fi
       fi
-      # Keep the PR a draft while the findings are being addressed.
-      if [[ "${pr_draft}" != "true" ]]; then
-        echo "Work resuming after review feedback; converting PR #${pr} back to a draft." >&2
-        gh_api_convert_pr_to_draft "${owner}" "${repo}" "${pr}" || echo "WARNING: could not convert PR #${pr} back to a draft; continuing." >&2
-        pr_draft="true"
-      fi
+      # Address the feedback without flipping a ready PR back to a draft:
+      # converting it to a draft right after it was marked ready (and handed
+      # over) is pointless churn (issue #970). The PR keeps its current draft
+      # state while the fix is made; the TODO.jsonl seeded above keeps the
+      # work tracked, and the ready transition at the end of this round (or
+      # the TODO.jsonl gate on the next iteration) lifts it when done.
       # The coding agent answers the reviewer in the thread itself (the reply
       # endpoint and every thread comment id are in the summary), besides any
       # code change the feedback asks for. The driver no longer posts its own
