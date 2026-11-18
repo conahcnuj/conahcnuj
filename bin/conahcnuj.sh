@@ -1306,8 +1306,11 @@ implement() {
     while true; do
       check_timeout
       now="$(date +%s)"
-      run_timeout=$((MAX_DURATION - (now - START_TIME) - 30))
-      (( run_timeout > 0 )) || run_timeout=1
+      run_timeout=$((MAX_DURATION - (now - START_TIME)))
+      if (( run_timeout <= 0 )); then
+        echo "Insufficient time remaining for another model round; stopping." >&2
+        break 2
+      fi
       if [[ -n "${OPENCODE_SESSION_ID}" && "${previous_model}" != "${model}" ]]; then
         echo "Handing off session ${OPENCODE_SESSION_ID} from ${previous_model} to ${model}." >&2
         OPENCODE_HANDOFFS="${OPENCODE_HANDOFFS}${previous_model}->${model} "
