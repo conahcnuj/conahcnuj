@@ -439,22 +439,26 @@ opencode_run() {
   if [[ "${OPENCODE_TEST_MODE:-0}" == "1" ]]; then
     : "${GH_TOKEN:=test-token}"
   else
-    if [[ -z "${GH_TOKEN:-}" ]]; then
-      local fetched_token
-      fetched_token="$(bash "${OPENCODE_LIB_DIR}/../gh-app/get-token.sh" 2>/dev/null || true)"
-      if [[ -n "${fetched_token}" ]]; then
-        GH_TOKEN="${fetched_token}"
-      fi
+    # Always issue the App token: an ambient GH_TOKEN may be stale or belong
+    # to a different account, which is exactly what made `gh auth status`
+    # report "The token in GH_TOKEN is invalid" (#964).
+    local fetched_token
+    fetched_token="$(bash "${OPENCODE_LIB_DIR}/../gh-app/get-token.sh" 2>/dev/null || true)"
+    if [[ -n "${fetched_token}" ]]; then
+      GH_TOKEN="${fetched_token}"
+    else
+      unset GH_TOKEN
     fi
   fi
-  export GH_TOKEN
   # GITHUB_TOKEN is the alias some tools (and the GitHub Actions runner)
-  # read instead of GH_TOKEN; keep them in sync so `gh` and the GitHub API
-  # work regardless of which name a caller looks up (#964).
-  if [[ -z "${GITHUB_TOKEN:-}" ]]; then
-    GITHUB_TOKEN="${GH_TOKEN:-}"
+  # read instead of GH_TOKEN; keep them in sync (and drop both when no App
+  # token is available) so no stale value can reach the agent's shells (#964).
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    GITHUB_TOKEN="${GH_TOKEN}"
+    export GH_TOKEN GITHUB_TOKEN
+  else
+    unset GH_TOKEN GITHUB_TOKEN
   fi
-  export GITHUB_TOKEN
 
   if [[ "${OPENCODE_TEST_MODE:-0}" == "1" ]]; then
     local _mv

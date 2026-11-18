@@ -19,6 +19,7 @@ unsigned コミットを塞ぐプラグインです。ファイルは `plugins/g
 | 変数 | 内容 |
 | --- | --- |
 | `GH_TOKEN` | インストールトークン（**ベストエフォート**。取得失敗してもシェル起動は止めない） |
+| `GITHUB_TOKEN` | `GH_TOKEN` と同じ値。`GITHUB_TOKEN` を読むツール向けの別名（#964） |
 | `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_<n>` / `GIT_CONFIG_VALUE_<n>` | 下表の git 設定 5 件 |
 | `CONAHCNUJ_COMMIT_MODEL` | 既に設定されていなければ、セッションのモデル表示名（ラベル） |
 

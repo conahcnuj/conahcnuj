@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Runs every driver test in this directory (offline: no secrets, no network).
-# The opencode version is detected once and only the matching test file
+# Runs the driver tests offline (no secrets, no network). The gh-auth E2E test
+# is version-independent (it uses a fake opencode on PATH); the opencode
+# library tests are version-specific, so only the matching test file
 # (opencode.sh for v1, opencode-v2.sh for v2) is executed — the other is
 # skipped because its expectations (CLI flags, mock output) are specific to
 # the other backend.
@@ -32,6 +33,10 @@ if [[ "${OPENCODE_VERSION}" == "v1" ]]; then
 else
   TEST_FILE="${HERE}/opencode-v2.sh"
 fi
+
+echo "Running: conahcnuj-gh-auth.sh"
+bash "${HERE}/conahcnuj-gh-auth.sh"
+echo "PASS: conahcnuj-gh-auth.sh"
 
 echo "Running: $(basename "${TEST_FILE}") (OPENCODE_VERSION=${OPENCODE_VERSION})"
 bash "${TEST_FILE}"

@@ -374,6 +374,7 @@ test("shell.env: publishes the App identity, the alias.vc wrapper and nothing el
   // No private key and no token cache in the stage, so no token is issued -
   // and nothing asked the network for one.
   assert.strictEqual(output.env.GH_TOKEN, undefined)
+  assert.strictEqual(output.env.GITHUB_TOKEN, undefined)
   assert.strictEqual(fetchCalls.length, 0)
   for (const key of Object.keys(output.env)) {
     assert.ok(
@@ -496,6 +497,77 @@ test("shell.env: a cached installation token is published without any network", 
   const output = { env: {} }
   await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
   assert.strictEqual(output.env.GH_TOKEN, "ghs_cached")
+  assert.strictEqual(output.env.GITHUB_TOKEN, "ghs_cached")
+  assert.strictEqual(fetchCalls.length, 0)
+})
+
+test("shell.env: `gh auth status` succeeds with the published token env", async () => {
+  // The small opencode-side check for #964: the env returned by shell.env is
+  // what opencode gives every shell it spawns. Run a fake `gh auth status`
+  // under exactly that env (no key, no network) and require it to succeed.
+  stage()
+  fs.writeFileSync(TOKEN_CACHE, `${Math.floor(Date.now() / 1000) + 3600}|ghs_cached\n`)
+  const plugin = await freshHooks()
+  const output = { env: {} }
+  await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
+  assert.strictEqual(output.env.GH_TOKEN, "ghs_cached")
+  assert.strictEqual(output.env.GITHUB_TOKEN, "ghs_cached")
+
+  const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), "conahcnuj-gh-"))
+  try {
+    const fakeGh = path.join(fakeBin, "gh")
+    fs.writeFileSync(
+      fakeGh,
+      [
+        "#!/bin/sh",
+        'if [ "${GH_TOKEN:-}" = "ghs_cached" ] && [ "${GITHUB_TOKEN:-}" = "ghs_cached" ]; then',
+        '  echo "Logged in to github.com account conahcnuj[bot]"',
+        "  exit 0",
+        "fi",
+        'echo "The token in GH_TOKEN is invalid." >&2',
+        "exit 1",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    )
+    const basePath = output.env.PATH || process.env.PATH || ""
+    const childEnv = {
+      ...process.env,
+      ...output.env,
+      PATH: `${fakeBin}${path.delimiter}${basePath}`,
+    }
+    const res = spawnSync("gh", ["auth", "status"], {
+      env: childEnv,
+      encoding: "utf8",
+    })
+    assert.strictEqual(
+      res.status,
+      0,
+      `gh auth status failed: ${res.stdout || ""} ${res.stderr || ""}`
+    )
+    assert.match(res.stdout, /Logged in to github.com account conahcnuj\[bot\]/)
+  } finally {
+    fs.rmSync(fakeBin, { recursive: true, force: true })
+  }
+})
+
+test("shell.env: the App token replaces a stale caller token in both names", async () => {
+  stage()
+  fs.writeFileSync(TOKEN_CACHE, `${Math.floor(Date.now() / 1000) + 3600}|ghs_cached\n`)
+  const plugin = await freshHooks()
+  const output = { env: { GH_TOKEN: "ghs_stale", GITHUB_TOKEN: "ghs_stale" } }
+  await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
+  assert.strictEqual(output.env.GH_TOKEN, "ghs_cached")
+  assert.strictEqual(output.env.GITHUB_TOKEN, "ghs_cached")
+})
+
+test("shell.env: an explicit caller token is mirrored when no App token exists", async () => {
+  stage()
+  const plugin = await freshHooks()
+  const output = { env: { GH_TOKEN: "ghs_caller" } }
+  await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
+  assert.strictEqual(output.env.GH_TOKEN, "ghs_caller")
+  assert.strictEqual(output.env.GITHUB_TOKEN, "ghs_caller")
   assert.strictEqual(fetchCalls.length, 0)
 })
 
@@ -515,6 +587,7 @@ test("shell.env: expired or malformed token caches are ignored, still no network
     const output = { env: {} }
     await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
     assert.strictEqual(output.env.GH_TOKEN, undefined, `for ${name}`)
+    assert.strictEqual(output.env.GITHUB_TOKEN, undefined, `for ${name}`)
     // The staged key file does not exist, so issuance stops before any
     // request is made.
     assert.strictEqual(fetchCalls.length, 0, `network call for ${name}`)
@@ -535,6 +608,7 @@ test("shell.env: issues a signed token, caches it and never sends the key twice"
   const first = { env: {} }
   await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, first)
   assert.strictEqual(first.env.GH_TOKEN, TOKEN)
+  assert.strictEqual(first.env.GITHUB_TOKEN, TOKEN)
   assert.strictEqual(fetchCalls.length, 1)
 
   // The request itself: right endpoint, and a JWT the staged key really
@@ -554,6 +628,7 @@ test("shell.env: issues a signed token, caches it and never sends the key twice"
   const second = { env: {} }
   await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, second)
   assert.strictEqual(second.env.GH_TOKEN, TOKEN)
+  assert.strictEqual(second.env.GITHUB_TOKEN, TOKEN)
   assert.strictEqual(fetchCalls.length, 1)
 
   // ...and a fresh run picks the written cache up instead of exchanging again.
@@ -561,6 +636,7 @@ test("shell.env: issues a signed token, caches it and never sends the key twice"
   const third = { env: {} }
   await reloaded["shell.env"]({ cwd: ".", sessionID: "s1" }, third)
   assert.strictEqual(third.env.GH_TOKEN, TOKEN)
+  assert.strictEqual(third.env.GITHUB_TOKEN, TOKEN)
   assert.strictEqual(fetchCalls.length, 1)
 })
 
@@ -601,6 +677,7 @@ test("shell.env: a failed exchange degrades to no GH_TOKEN", async () => {
     const output = { env: {} }
     await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
     assert.strictEqual(output.env.GH_TOKEN, undefined, `for ${name}`)
+    assert.strictEqual(output.env.GITHUB_TOKEN, undefined, `for ${name}`)
     assert.strictEqual(fs.existsSync(TOKEN_CACHE), false, `cache written for ${name}`)
     assert.strictEqual(fetchCalls.length, 1, `for ${name}`)
   }
@@ -638,6 +715,7 @@ test("shell.env: unusable exchange config never reaches the network", async () =
     const output = { env: {} }
     await plugin["shell.env"]({ cwd: ".", sessionID: "s1" }, output)
     assert.strictEqual(output.env.GH_TOKEN, undefined, `for ${name}`)
+    assert.strictEqual(output.env.GITHUB_TOKEN, undefined, `for ${name}`)
     assert.strictEqual(fetchCalls.length, 0, `network call for ${name}`)
   }
 })
