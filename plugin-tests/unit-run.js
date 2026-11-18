@@ -515,54 +515,48 @@ test("shell.env: `gh auth status` succeeds with the published token env", async 
 
   const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), "conahcnuj-gh-"))
   try {
-    // On Windows, an extensionless file named `gh` confuses SearchPathW (it is
-    // returned as an exact match and then fails to execute), so only create the
-    // platform-appropriate shim: a shell script on Unix, a .cmd on Windows.
-    if (process.platform === "win32") {
-      fs.writeFileSync(
-        path.join(fakeBin, "gh.cmd"),
-        [
-          "@echo off",
-          'if not "%GH_TOKEN%"=="ghs_cached" goto fail',
-          'if not "%GITHUB_TOKEN%"=="ghs_cached" goto fail',
-          'echo Logged in to github.com account conahcnuj[bot]',
-          "exit /b 0",
-          ":fail",
-          'echo The token in GH_TOKEN is invalid. 1>&2',
-          "exit /b 1",
-          "",
-        ].join("\r\n")
-      )
-    } else {
-      fs.writeFileSync(
-        path.join(fakeBin, "gh"),
-        [
-          "#!/bin/sh",
-          'if [ "${GH_TOKEN:-}" = "ghs_cached" ] && [ "${GITHUB_TOKEN:-}" = "ghs_cached" ]; then',
-          '  echo "Logged in to github.com account conahcnuj[bot]"',
-          "  exit 0",
-          "fi",
-          'echo "The token in GH_TOKEN is invalid." >&2',
-          "exit 1",
-          "",
-        ].join("\n"),
-        { mode: 0o755 }
-      )
+    // Unix: an extensionless executable resolved via PATH.
+    fs.writeFileSync(
+      path.join(fakeBin, "gh"),
+      [
+        "#!/bin/sh",
+        'if [ "${GH_TOKEN:-}" = "ghs_cached" ] && [ "${GITHUB_TOKEN:-}" = "ghs_cached" ]; then',
+        '  echo "Logged in to github.com account conahcnuj[bot]"',
+        "  exit 0",
+        "fi",
+        'echo "The token in GH_TOKEN is invalid." >&2',
+        "exit 1",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    )
+    // Windows: Node resolves .cmd via cmd.exe (shell: true below); keep
+    // both so the same PATH works on either platform.
+    fs.writeFileSync(
+      path.join(fakeBin, "gh.cmd"),
+      [
+        "@echo off",
+        'if not "%GH_TOKEN%"=="ghs_cached" goto fail',
+        'if not "%GITHUB_TOKEN%"=="ghs_cached" goto fail',
+        'echo Logged in to github.com account conahcnuj[bot]',
+        "exit /b 0",
+        ":fail",
+        'echo The token in GH_TOKEN is invalid. 1>&2',
+        "exit /b 1",
+        "",
+      ].join("\r\n")
+    )
+    const basePath = output.env.PATH || process.env.PATH || ""
+    const childEnv = {
+      ...process.env,
+      ...output.env,
+      PATH: `${fakeBin}${path.delimiter}${basePath}`,
+      PATHEXT: ".CMD;.BAT;.EXE;.COM;" + (process.env.PATHEXT || ""),
     }
-    const basePath = output.env.PATH || process.env.PATH || process.env.Path || ""
-    const childEnv = { ...process.env, ...output.env }
-    // On Windows, process.env carries `Path` (mixed case) while the plugin
-    // (and this test) write `PATH`. Node picks one case-insensitively and the
-    // inherited `Path` can shadow the injected value, so drop every other case
-    // variant before setting the one we control.
-    for (const key of Object.keys(childEnv)) {
-      if (key !== "PATH" && key.toLowerCase() === "path") delete childEnv[key]
-    }
-    childEnv.PATH = `${fakeBin}${path.delimiter}${basePath}`
-    childEnv.PATHEXT = ".CMD;.BAT;.EXE;.COM;" + (process.env.PATHEXT || "")
-    const res = spawnSync("gh", ["auth", "status"], {
+    const res = spawnSync("gh auth status", {
       env: childEnv,
       encoding: "utf8",
+      shell: true,
     })
     assert.strictEqual(
       res.status,
