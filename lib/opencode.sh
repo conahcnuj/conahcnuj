@@ -448,6 +448,13 @@ opencode_run() {
     fi
   fi
   export GH_TOKEN
+  # GITHUB_TOKEN is the alias some tools (and the GitHub Actions runner)
+  # read instead of GH_TOKEN; keep them in sync so `gh` and the GitHub API
+  # work regardless of which name a caller looks up (#964).
+  if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+    GITHUB_TOKEN="${GH_TOKEN:-}"
+  fi
+  export GITHUB_TOKEN
 
   if [[ "${OPENCODE_TEST_MODE:-0}" == "1" ]]; then
     local _mv

@@ -377,7 +377,7 @@ test("shell.env: publishes the App identity, the alias.vc wrapper and nothing el
   assert.strictEqual(fetchCalls.length, 0)
   for (const key of Object.keys(output.env)) {
     assert.ok(
-      /^(GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)|PATH)$/.test(key),
+      /^(GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)|PATH|GH_TOKEN|GITHUB_TOKEN)$/.test(key),
       `unexpected shell env key: ${key}`
     )
   }
