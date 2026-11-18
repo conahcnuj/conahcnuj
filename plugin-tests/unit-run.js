@@ -530,6 +530,22 @@ test("shell.env: `gh auth status` succeeds with the published token env", async 
       ].join("\n"),
       { mode: 0o755 }
     )
+    // Windows executable shim: Node only resolves extensionless files on Unix,
+    // so provide a .cmd variant that cmd.exe (used by spawnSync for .cmd) runs.
+    fs.writeFileSync(
+      path.join(fakeBin, "gh.cmd"),
+      [
+        "@echo off",
+        'if not "%GH_TOKEN%"=="ghs_cached" goto fail',
+        'if not "%GITHUB_TOKEN%"=="ghs_cached" goto fail',
+        'echo Logged in to github.com account conahcnuj[bot]',
+        "exit /b 0",
+        ":fail",
+        'echo The token in GH_TOKEN is invalid. 1>&2',
+        "exit /b 1",
+        "",
+      ].join("\r\n")
+    )
     const basePath = output.env.PATH || process.env.PATH || ""
     const childEnv = {
       ...process.env,
