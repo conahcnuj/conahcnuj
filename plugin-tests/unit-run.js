@@ -559,6 +559,7 @@ test("shell.env: `gh auth status` succeeds with the published token env", async 
       if (key !== "PATH" && key.toLowerCase() === "path") delete childEnv[key]
     }
     childEnv.PATH = `${fakeBin}${path.delimiter}${basePath}`
+    childEnv.PATHEXT = ".CMD;.BAT;.EXE;.COM;" + (process.env.PATHEXT || "")
     const res = spawnSync("gh", ["auth", "status"], {
       env: childEnv,
       encoding: "utf8",
