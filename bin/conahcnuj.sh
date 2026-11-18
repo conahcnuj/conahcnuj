@@ -1894,7 +1894,7 @@ drive() {
       has_new_feedback="true"
     fi
 
-    if [[ "${pr_draft}" == "true" && "${has_new_feedback}" != "true" && "${decision}" != "CHANGES_REQUESTED" && "${decision}" != "COMMENTED" ]]; then
+    if [[ "${pr_draft}" == "true" && "${has_new_feedback}" != "true" ]]; then
       echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
       gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
       pr_draft="false"
