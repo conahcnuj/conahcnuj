@@ -515,42 +515,45 @@ test("shell.env: `gh auth status` succeeds with the published token env", async 
 
   const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), "conahcnuj-gh-"))
   try {
-    const fakeGh = path.join(fakeBin, "gh")
-    fs.writeFileSync(
-      fakeGh,
-      [
-        "#!/bin/sh",
-        'if [ "${GH_TOKEN:-}" = "ghs_cached" ] && [ "${GITHUB_TOKEN:-}" = "ghs_cached" ]; then',
-        '  echo "Logged in to github.com account conahcnuj[bot]"',
-        "  exit 0",
-        "fi",
-        'echo "The token in GH_TOKEN is invalid." >&2',
-        "exit 1",
-        "",
-      ].join("\n"),
-      { mode: 0o755 }
-    )
-    // Windows executable shim: Node only resolves extensionless files on Unix,
-    // so provide a .cmd variant that cmd.exe (used by spawnSync for .cmd) runs.
-    fs.writeFileSync(
-      path.join(fakeBin, "gh.cmd"),
-      [
-        "@echo off",
-        'if not "%GH_TOKEN%"=="ghs_cached" goto fail',
-        'if not "%GITHUB_TOKEN%"=="ghs_cached" goto fail',
-        'echo Logged in to github.com account conahcnuj[bot]',
-        "exit /b 0",
-        ":fail",
-        'echo The token in GH_TOKEN is invalid. 1>&2',
-        "exit /b 1",
-        "",
-      ].join("\r\n")
-    )
+    const isWin = process.platform === "win32"
+    const fakeGh = path.join(fakeBin, isWin ? "gh.cmd" : "gh")
+    if (isWin) {
+      fs.writeFileSync(
+        fakeGh,
+        [
+          "@echo off",
+          'if not "%GH_TOKEN%"=="ghs_cached" goto fail',
+          'if not "%GITHUB_TOKEN%"=="ghs_cached" goto fail',
+          'echo Logged in to github.com account conahcnuj[bot]',
+          "exit /b 0",
+          ":fail",
+          'echo The token in GH_TOKEN is invalid. 1>&2',
+          "exit /b 1",
+          "",
+        ].join("\r\n")
+      )
+    } else {
+      fs.writeFileSync(
+        fakeGh,
+        [
+          "#!/bin/sh",
+          'if [ "${GH_TOKEN:-}" = "ghs_cached" ] && [ "${GITHUB_TOKEN:-}" = "ghs_cached" ]; then',
+          '  echo "Logged in to github.com account conahcnuj[bot]"',
+          "  exit 0",
+          "fi",
+          'echo "The token in GH_TOKEN is invalid." >&2',
+          "exit 1",
+          "",
+        ].join("\n"),
+        { mode: 0o755 }
+      )
+    }
     const basePath = output.env.PATH || process.env.PATH || ""
     const childEnv = {
       ...process.env,
       ...output.env,
       PATH: `${fakeBin}${path.delimiter}${basePath}`,
+      PATHEXT: ".CMD;.BAT;.EXE;.COM;" + (process.env.PATHEXT || ""),
     }
     const res = spawnSync("gh", ["auth", "status"], {
       env: childEnv,
