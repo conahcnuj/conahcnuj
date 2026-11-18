@@ -33,6 +33,10 @@ else
   TEST_FILE="${HERE}/opencode-v2.sh"
 fi
 
+echo "Running: conahcnuj-gh-auth.sh"
+bash "${HERE}/conahcnuj-gh-auth.sh"
+echo "PASS: conahcnuj-gh-auth.sh"
+
 echo "Running: $(basename "${TEST_FILE}") (OPENCODE_VERSION=${OPENCODE_VERSION})"
 bash "${TEST_FILE}"
 echo "PASS: $(basename "${TEST_FILE}")"

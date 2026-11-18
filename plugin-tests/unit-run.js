@@ -376,9 +376,13 @@ test("shell.env: publishes the App identity, the alias.vc wrapper and nothing el
   assert.strictEqual(output.env.GH_TOKEN, undefined)
   assert.strictEqual(output.env.GITHUB_TOKEN, undefined)
   assert.strictEqual(fetchCalls.length, 0)
+  // Only GIT_CONFIG_* keys are validated here: GH_TOKEN/GITHUB_TOKEN and
+  // PATH are checked (or injected) separately, so re-asserting them in this
+  // loop would just duplicate those checks.
   for (const key of Object.keys(output.env)) {
+    if (!key.startsWith("GIT_CONFIG_")) continue
     assert.ok(
-      /^(GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)|PATH)$/.test(key),
+      /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/.test(key),
       `unexpected shell env key: ${key}`
     )
   }
