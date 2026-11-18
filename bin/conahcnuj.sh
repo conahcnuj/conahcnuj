@@ -1319,24 +1319,29 @@ implement() {
       if workdir_changed "${workdir}"; then
         tree_changed="true"
       fi
-      if [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" != "true" ]]; then
-        if [[ "${committed}" == "true" ]]; then
-          rm -f "${workdir}/.commit-msg"
-          echo "Model ${model} completed the work and committed it." >&2
-          OPENCODE_LAST_MODEL="${model}"
-          return 0
-        fi
-        if [[ "${tree_changed}" == "true" && "${wrote_message}" == "true" ]]; then
-          echo "Model ${model} completed the work." >&2
-          OPENCODE_LAST_MODEL="${model}"
-          return 0
-        fi
-        if [[ "${wrote_message}" == "true" ]] && branch_has_commits "" "${base_branch}"; then
-          rm -f "${workdir}/.commit-msg"
-          echo "Model ${model} wrote .commit-msg and left the tree as it was; the branch already carries the implementation, so the round is complete." >&2
-          OPENCODE_LAST_MODEL="${model}"
-          return 0
-        fi
+      # A commit (or any other explicit completion signal) landed during the
+      # round counts as finished work even when the model also triggered an
+      # interactive prompt this non-interactive run could not answer (e.g. a
+      # Web Search confirmation): the commit is conclusive evidence the work
+      # was done, and the cancelled prompt is incidental (#964). Only a round
+      # that leaves mere partial changes (no commit, no .commit-msg) is
+      # treated as incomplete, so it can hand off to the next model.
+      if [[ "${committed}" == "true" ]]; then
+        rm -f "${workdir}/.commit-msg"
+        echo "Model ${model} completed the work and committed it." >&2
+        OPENCODE_LAST_MODEL="${model}"
+        return 0
+      fi
+      if [[ "${tree_changed}" == "true" && "${wrote_message}" == "true" ]]; then
+        echo "Model ${model} completed the work." >&2
+        OPENCODE_LAST_MODEL="${model}"
+        return 0
+      fi
+      if [[ "${wrote_message}" == "true" ]] && branch_has_commits "" "${base_branch}"; then
+        rm -f "${workdir}/.commit-msg"
+        echo "Model ${model} wrote .commit-msg and left the tree as it was; the branch already carries the implementation, so the round is complete." >&2
+        OPENCODE_LAST_MODEL="${model}"
+        return 0
       fi
       rm -f "${workdir}/.commit-msg"
       previous_model="${model}"

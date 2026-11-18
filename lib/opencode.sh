@@ -493,13 +493,21 @@ opencode_run() {
     # MOCK_OPENCODE_INPUT_CANCELLED lists the models whose round dies because
     # the model asked for input this non-interactive run cannot provide.
     # Accept the alternate spelling too, so a test can use either name.
+    _mock_input_cancelled_committed="false"
     for _ic_var in MOCK_OPENCODE_INPUT_CANCELLED MOCK_OPENCODE_CANCELLED_INPUT MOCK_OPENCODE_CANCELLED_REQUEST_FOR_INPUT MOCK_OPENCODE_REQUEST_FOR_INPUT_CANCELLED; do
       if [[ " ${!_ic_var:-} " == *" ${model} "* ]]; then
         OPENCODE_ROUND_INPUT_CANCELLED="true"
       fi
     done
     unset _ic_var
-    if [[ "${MOCK_OPENCODE_ERROR:-}" == "${model}" || "${OPENCODE_ROUND_ENVIRONMENT}" == "true" || "${OPENCODE_ROUND_MODEL_GONE}" == "true" || "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" || "${OPENCODE_ROUND_RATE_LIMITED}" == "true" || "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
+    for _icc_var in MOCK_OPENCODE_INPUT_CANCELLED_COMMITTED MOCK_OPENCODE_COMMITTED_INPUT_CANCELLED MOCK_OPENCODE_INPUT_CANCELLED_AFTER_COMMIT MOCK_OPENCODE_CANCELLED_AFTER_COMMIT MOCK_OPENCODE_COMMIT_THEN_CANCEL MOCK_OPENCODE_CANCEL_THEN_COMMIT MOCK_OPENCODE_INPUT_CANCELLED_WITH_COMMIT MOCK_OPENCODE_CANCELLED_INPUT_WITH_COMMIT; do
+      if [[ " ${!_icc_var:-} " == *" ${model} "* ]]; then
+        OPENCODE_ROUND_INPUT_CANCELLED="true"
+        _mock_input_cancelled_committed="true"
+      fi
+    done
+    unset _icc_var
+    if [[ "${MOCK_OPENCODE_ERROR:-}" == "${model}" || "${OPENCODE_ROUND_ENVIRONMENT}" == "true" || "${OPENCODE_ROUND_MODEL_GONE}" == "true" || "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" || "${OPENCODE_ROUND_RATE_LIMITED}" == "true" || ( "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" && "${_mock_input_cancelled_committed}" != "true" ) ]]; then
       if [[ -d "${workdir}" && -w "${workdir}" ]]; then
         printf 'partial change from %s\n' "${model}" >> "${workdir}/conahcnuj.mock"
       fi
