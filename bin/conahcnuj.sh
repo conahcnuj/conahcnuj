@@ -1126,33 +1126,26 @@ collect_initial_context() {
     rv="$(gh_api_fetch_reviews "${owner}" "${repo}" "${pr}")"
     payload="$(printf '%s' "${rv}" | cut -d'|' -f2)"
     raw="$(gh_api_unb64 "${payload}")"
-    # A null review decision means no review has been recorded, so there is no
-    # reviewer feedback to act on: do not collect unresolved threads (or the
-    # hidden-conversation hint) as work to do.
-    local decision
-    decision="$(gh_api_json_str "${raw}" "reviewDecision")"
-    if [[ "${decision}" != "null" && -n "${decision}" ]]; then
-      threads="$(printf '%s' "${raw}" | gh_api_unresolved_threads)"
-      if [[ -n "${threads}" ]]; then
-        out="Unresolved review threads on PR #${pr}:
+    threads="$(printf '%s' "${raw}" | gh_api_unresolved_threads)"
+    if [[ -n "${threads}" ]]; then
+      out="Unresolved review threads on PR #${pr}:
 ${threads}"
-        labels="unresolved review threads of PR #${pr}"
-      fi
-      # Count the resolved (hidden) conversations so the agent knows they exist
-      # and are already settled instead of re-reading them.
-      local resolved_count
-      resolved_count="$(printf '%s' "${raw}" | grep -oE '"isResolved"[[:space:]]*:[[:space:]]*true' | wc -l | tr -d '[:space:]')" || true
-      resolved_count="${resolved_count:-0}"
-      [[ "${resolved_count}" =~ ^[0-9]+$ ]] || resolved_count=0
-      if [[ "${resolved_count}" -gt 0 ]]; then
-        if [[ -n "${out}" ]]; then
-          out="${out}
-
+      labels="unresolved review threads of PR #${pr}"
+    fi
+    # Count the resolved (hidden) conversations so the agent knows they exist
+    # and are already settled instead of re-reading them.
+    local resolved_count
+    resolved_count="$(printf '%s' "${raw}" | grep -oE '"isResolved"[[:space:]]*:[[:space:]]*true' | wc -l | tr -d '[:space:]')" || true
+    resolved_count="${resolved_count:-0}"
+    [[ "${resolved_count}" =~ ^[0-9]+$ ]] || resolved_count=0
+    if [[ "${resolved_count}" -gt 0 ]]; then
+      if [[ -n "${out}" ]]; then
+        out="${out}
+ 
 "
-        fi
-        out="${out}Hidden (resolved) conversations: ${resolved_count} — already settled; hidden conversations are resolved (treat hidden conversations as resolved)."
-        labels="${labels:+${labels}, }hidden resolved conversations"
       fi
+      out="${out}Hidden (resolved) conversations: ${resolved_count} — already settled; hidden conversations are resolved (treat hidden conversations as resolved)."
+      labels="${labels:+${labels}, }hidden resolved conversations"
     fi
   fi
 
@@ -1884,13 +1877,14 @@ drive() {
     # review feedback must stay a draft while it is addressed, so marking it
     # ready only to convert it back to a draft a few lines later is pointless
     # noise (issue #970).
-    local rv decision payload raw summary sig actionable has_new_feedback
+    local rv decision payload raw summary sig actionable has_new_feedback unresolved_threads review_threads
     rv="$(gh_api_fetch_reviews "${owner}" "${repo}" "${pr}")"
     decision="$(printf '%s' "${rv}" | cut -d'|' -f1)"
     payload="$(printf '%s' "${rv}" | cut -d'|' -f2)"
     raw="$(gh_api_unb64 "${payload}")"
     summary="$(printf '%s' "${raw}" | gh_api_review_summary)"
     sig="$(gh_api_review_fingerprint "${raw}")"
+    unresolved_threads="$(printf '%s' "${raw}" | gh_api_unresolved_threads)"
     echo "reviewDecision: ${decision:-NONE}" >&2
 
     if [[ "${decision}" == "APPROVED" ]]; then
@@ -1909,6 +1903,11 @@ drive() {
       case "${decision}" in
         CHANGES_REQUESTED|COMMENTED|REVIEW_REQUIRED|"") actionable="true" ;;
       esac
+    fi
+    if [[ "${decision}" == "null" || -z "${decision}" ]]; then
+      if [[ -n "${unresolved_threads}" ]]; then
+        actionable="true"
+      fi
     fi
 
     has_new_feedback="false"
@@ -2027,11 +2026,13 @@ ${summary}"
         gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
         pr_draft="false"
       fi
-      request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
-      log_review_handoff "${owner}" "${repo}" "${pr}" "${REVIEWER:-${owner}}"
-      if [[ "${CI_MODE}" == "true" ]]; then
-        echo "CI mode: review requested; ending the run." >&2
-        exit 0
+      if [[ "${decision}" != "null" && -n "${decision}" ]]; then
+        request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
+        log_review_handoff "${owner}" "${repo}" "${pr}" "${REVIEWER:-${owner}}"
+        if [[ "${CI_MODE}" == "true" ]]; then
+          echo "CI mode: review requested; ending the run." >&2
+          exit 0
+        fi
       fi
       handed_off="true"
       continue
@@ -2123,14 +2124,14 @@ ${summary}"
     fi
     # The constraints pass, so the PR is ready for a human: hand it over. The
     # run does not end here; the next loop iteration waits for the verdict.
-    # A null review decision with unresolved threads (or a pending review) means
-    # the owner is mid-review: GitHub refuses a new review request with 422
-    # ("reviewDecision: null"), so do not request review and just wait for them
-    # to submit it instead of crashing the run (issue #956).
     if [[ "${decision}" == "null" || -z "${decision}" ]]; then
-      echo "PR #${pr}: reviewer has an unfinished (unsubmitted) review; waiting for it to be submitted." >&2
-      handed_off="true"
-      continue
+      if [[ -z "${unresolved_threads}" ]]; then
+        if [[ "${CONAHCNUJ_VERBOSE:-0}" == "1" || "${CONAHCNUJ_VERBOSE:-}" == "true" || "${CONAHCNUJ_DEBUG:-0}" == "1" || "${CONAHCNUJ_DEBUG:-}" == "true" || "${VERBOSE:-0}" == "1" || "${VERBOSE:-}" == "true" ]]; then
+          echo "PR #${pr}: reviewer has an unfinished (unsubmitted) review; waiting for it to be submitted." >&2
+        fi
+        handed_off="true"
+        continue
+      fi
     fi
     request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
     log_review_handoff "${owner}" "${repo}" "${pr}" "${REVIEWER:-${owner}}"

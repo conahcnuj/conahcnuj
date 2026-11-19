@@ -302,11 +302,11 @@ test_review_summary() {
 test_review_summary_null() {
   local summary
   summary="$(printf '%s\n' "${MOCK_REVIEWS_NULL}" | gh_api_review_summary)"
-  # A null review decision means no review has been recorded: do not surface
-  # unresolved conversations (or a "REVIEW THREADS" section) as work to do.
+  # A null review decision no longer suppresses unresolved conversations:
+  # existing reviews' open threads are still surfaced (issue #989).
   [[ "${summary}" == *"reviewDecision: NONE"* ]]
-  [[ "${summary}" != *"REVIEW THREADS (unresolved):"* ]]
-  [[ "${summary}" != *"Inline note on line 10"* ]]
+  [[ "${summary}" == *"REVIEW THREADS (unresolved):"* ]]
+  [[ "${summary}" == *"Inline note on line 10"* ]]
 }
 
 test_find_pr_by_head() {
