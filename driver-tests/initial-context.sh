@@ -48,17 +48,17 @@ out="$(collect_initial_context "conahcnuj" "conahcnuj" "15" < "${TAPE}" 2>"${ERR
 grep -q "Collected context up front: unresolved review threads of PR #15" "${ERR}" || { echo "FAIL: the run log does not say what was collected"; cat "${ERR}" >&2; exit 1; }
 
 # A resumed PR whose review decision is null (the reviewer is mid-review and
-# has not submitted a review): no unresolved threads are collected as work to
-# do, even when the payload carries unresolved conversations. Otherwise the
-# agent would be sent to address feedback that does not exist.
+# has an unsubmitted review): unresolved threads from existing reviews are
+# still collected as work to do, so they can be addressed instead of waiting
+# for the unsubmitted review (issue #989).
 TAPE_NULL="${ROOT}/tape-null.txt"
 cat > "${TAPE_NULL}" <<'EOF'
 {"data":{"repository":{"pullRequest":{"reviewDecision":null,"reviews":{"nodes":[]},"comments":{"nodes":[]},"reviewThreads":{"nodes":[{"isResolved":false,"comments":{"nodes":[{"databaseId":201,"body":"Please write tests","author":{"login":"reviewer"}}]}}]}}}}}
 EOF
 out="$(collect_initial_context "conahcnuj" "conahcnuj" "15" < "${TAPE_NULL}" 2>"${ERR}")"
-[[ "${out}" != *"Unresolved review threads"* ]] || { echo "FAIL: a null review decision collected review threads"; exit 1; }
-[[ "${out}" != *"Please write tests"* ]] || { echo "FAIL: a null review decision collected a thread body"; exit 1; }
-grep -q "Collected context up front: nothing" "${ERR}" || { echo "FAIL: a null review decision did not report nothing collected"; cat "${ERR}" >&2; exit 1; }
+[[ "${out}" == *"Unresolved review threads on PR #15:"* ]] || { echo "FAIL: a null review decision did not collect review threads"; exit 1; }
+[[ "${out}" == *"- [comment 201 by reviewer] Please write tests"* ]] || { echo "FAIL: a null review decision did not collect the thread body"; exit 1; }
+grep -q "Collected context up front: unresolved review threads of PR #15" "${ERR}" || { echo "FAIL: the run log does not say what was collected"; cat "${ERR}" >&2; exit 1; }
 # A fresh issue has no PR to read threads from: the same payload would have
 # produced them above, so its absence proves no API call was made.
 out="$(collect_initial_context "conahcnuj" "conahcnuj" "" < "${TAPE}" 2>/dev/null)"

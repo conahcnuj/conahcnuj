@@ -547,9 +547,11 @@ gh_api_review_summary() {
           const decision = pr.reviewDecision;
           console.log("reviewDecision: " + (decision == null ? "NONE" : decision));
           const threads = (pr.reviewThreads && pr.reviewThreads.nodes) || [];
-          // A null review decision means no review has been recorded: do not
-          // surface unresolved conversations as work to do.
-          if (decision === null || decision === undefined) { return; }
+          // Unresolved threads are surfaced even when the review decision is
+          // null (an unsubmitted review is in flight): existing (submitted)
+          // reviews may still carry unresolved conversations that need
+          // addressing. Only the "wait for the unsubmitted review" path treats
+          // a null decision with no unresolved threads as waiting (issue #989).
           const unresolved = threads.filter(t => !t.isResolved);
           let printedHeader = false;
           for (const t of unresolved) {
@@ -599,12 +601,10 @@ gh_api_review_summary() {
     printf 'reviewDecision: %s\n' "${decision}" 2>/dev/null || true
   fi
 
-  # A null review decision means no review has been recorded: do not surface
-  # unresolved conversations (or the hidden-count hint) as work to do.
-  if [[ "${decision}" == "null" || -z "${decision}" ]]; then
-    return 0
-  fi
-
+  # A null review decision (an unsubmitted review in flight) no longer
+  # suppresses unresolved conversations: existing reviews may still carry
+  # unresolved threads to address (issue #989). The hidden-count hint is
+  # surfaced too, so the agent sees resolved conversations are settled.
   local fmt
   fmt="$(gh_api_format_unresolved_threads "${json}")"
   if [[ -n "${fmt}" ]]; then
@@ -630,13 +630,11 @@ gh_api_unresolved_threads() {
 # carry no id (an older/parsed-down payload) still print their body.
 gh_api_format_unresolved_threads() {
   local json="${1}"
-  # A null review decision means no review has been recorded: do not surface
-  # unresolved conversations as work to do.
+  # Unresolved conversations are surfaced even for a null review decision, so
+  # existing (submitted) reviews' open threads can be addressed while an
+  # unsubmitted review is in flight (issue #989).
   local decision
   decision="$(gh_api_json_str "${json}" "reviewDecision")"
-  if [[ "${decision}" == "null" || -z "${decision}" ]]; then
-    return 0
-  fi
   if command -v node >/dev/null 2>&1; then
     node -e '
       let data = "";
@@ -718,13 +716,11 @@ gh_api_format_unresolved_threads() {
 }
 gh_api_review_fingerprint() {
   local raw="${1}" matches="" decision=""
-  # A null review decision means no review has been recorded, so there is no
-  # reviewer feedback to act on: do not fingerprint the threads as work, even
-  # if unresolved conversations happen to exist.
+  # A null review decision (an unsubmitted review in flight) no longer makes
+  # the fingerprint empty by itself: unresolved threads from existing reviews
+  # are feedback to act on (issue #989). With no threads and no actionable
+  # decision, the fallback below still yields an empty fingerprint.
   decision="$(gh_api_json_str "${raw}" "reviewDecision")"
-  if [[ "${decision}" == "null" || -z "${decision}" ]]; then
-    return 0
-  fi
   # Resolution state itself is not feedback: a thread being marked resolved
   # must not look like new reviewer input, so drop the isResolved tokens. The
   # thread's comments still hash, which keeps a later resolution from
