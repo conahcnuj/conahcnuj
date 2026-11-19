@@ -67,5 +67,3 @@ with open(sys.argv[1], "w") as f:
 PY
 threads2="$(gh_api_unresolved_threads < "${TMP}/botonly.json")"
 [[ "${threads2}" == *"[comment 301 by conahcnuj[bot]] Already answered"* ]] || { echo "FAIL: bot-only thread missing"; exit 1; }
-
-echo "All review-answered-thread tests passed"
