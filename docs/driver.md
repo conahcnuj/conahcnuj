@@ -123,7 +123,11 @@ provider の rate limit（`Rate limit exceeded. Please try again later.`）で�
 唯一の例外がレビュースレッドへの返信です。これはドライバが代行せず、
 フィードバック対応ラウンドで各スレッドの comment id と返信エンドポイント
 （`POST /repos/<owner>/<repo>/pulls/<n>/comments/<id>/replies`）を添え、
-エージェント自身が返信します。返信は修正のコミット・push が済んだ後に
+エージェント自身が返信します。スレッドの最後のコメントが自身（bot）の
+ものである場合は、新たなコメントを投稿せず、その最新コメントを修正する
+（`PATCH /repos/<owner>/<repo>/pulls/comments/<id>`）形で応答します。
+応答の作成中に reviewer から返信が来た場合は、編集ではなく新規投稿に
+切り替えるよう注意します。返信は修正のコミット・push が済んだ後に
 行います（先にコメントすると、まだ push されていない修正をレビュアーに
 誤認させるため。#485）。返信は bot 著者のコメントとして fingerprint から
 除外されるため、新規の reviewer 意見と誤認されません。
