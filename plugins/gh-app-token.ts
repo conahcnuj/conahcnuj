@@ -670,7 +670,7 @@ function labelForSession(sessionID: string | undefined): string {
  * and other plumbing keep their own meaning and are not touched here.
  */
 function rewriteGitCommitToVc(cmd: string): string | null {
-  const re = /(\bgit(?:\.exe)?(?:\s+(?:-[cC]\s+\S+|--[a-z-]+(?:=\S+)?|-[a-zA-Z]))*\s+)commit(?=\s|$)/g
+  const re = /(\bgit(?:\.exe)?(?:\s+(?!commit(?:\s|$))\S+)*\s+)commit(?=\s|$)/g
   const out = cmd.replace(re, "$1vc")
   return out !== cmd ? out : null
 }
