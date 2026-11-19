@@ -1126,9 +1126,6 @@ collect_initial_context() {
     rv="$(gh_api_fetch_reviews "${owner}" "${repo}" "${pr}")"
     payload="$(printf '%s' "${rv}" | cut -d'|' -f2)"
     raw="$(gh_api_unb64 "${payload}")"
-    # Collect unresolved threads even when the review decision is null: an
-    # unsubmitted review in flight does not make existing reviews' open
-    # threads disappear, and they still need addressing (issue #989).
     threads="$(printf '%s' "${raw}" | gh_api_unresolved_threads)"
     if [[ -n "${threads}" ]]; then
       out="Unresolved review threads on PR #${pr}:
@@ -1907,10 +1904,6 @@ drive() {
         CHANGES_REQUESTED|COMMENTED|REVIEW_REQUIRED|"") actionable="true" ;;
       esac
     fi
-    # A null review decision (reviewer mid-review with an unsubmitted review)
-    # is still actionable when existing (submitted) reviews carry unresolved
-    # threads: address them instead of waiting for the unsubmitted review
-    # (issue #989).
     if [[ "${decision}" == "null" || -z "${decision}" ]]; then
       if [[ -n "${unresolved_threads}" ]]; then
         actionable="true"
@@ -2033,8 +2026,6 @@ ${summary}"
         gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
         pr_draft="false"
       fi
-      # An unsubmitted review is still in flight (decision null): do not
-      # request review (GitHub refuses with 422); just hand off and wait.
       if [[ "${decision}" != "null" && -n "${decision}" ]]; then
         request_review_from_owner "${owner}" "${repo}" "${pr}" || exit 1
         log_review_handoff "${owner}" "${repo}" "${pr}" "${REVIEWER:-${owner}}"
@@ -2133,15 +2124,8 @@ ${summary}"
     fi
     # The constraints pass, so the PR is ready for a human: hand it over. The
     # run does not end here; the next loop iteration waits for the verdict.
-    # A null review decision with unresolved threads (or a pending review) means
-    # the owner is mid-review: GitHub refuses a new review request with 422
-    # ("reviewDecision: null"), so do not request review and just wait for them
-    # to submit it instead of crashing the run (issue #956).
-    # Only wait for the unsubmitted review when there is no new feedback to
-    # address: if existing reviews still carry unresolved threads, address
-    # those first (issue #989).
     if [[ "${decision}" == "null" || -z "${decision}" ]]; then
-      if [[ "${has_new_feedback}" != "true" ]]; then
+      if [[ -z "${unresolved_threads}" ]]; then
         echo "PR #${pr}: reviewer has an unfinished (unsubmitted) review; waiting for it to be submitted." >&2
         handed_off="true"
         continue
