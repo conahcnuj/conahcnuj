@@ -51,16 +51,17 @@ async function main() {
   )
 
   const before = plugin["tool.execute.before"]
-  let threw = false
-  try {
-    await before({ tool: "bash" }, { args: { command: 'git commit -m "x"' }, env: {} })
-  } catch (err) {
-    threw = /git vc/.test(String((err && err.message) || err))
-  }
-  assert(threw, "git commit was not redirected to git vc")
+  // `git commit` is now rewritten to `git vc` in place (transparent verified
+  // commit) instead of being blocked.
+  const rewrittenArgs = { command: 'git commit -m "x"' }
+  await before({ tool: "bash" }, { args: rewrittenArgs, env: {} })
+  assert(
+    typeof rewrittenArgs.command === "string" && rewrittenArgs.command.includes("git vc"),
+    "git commit was not rewritten to git vc"
+  )
   // The hook must also steer a direct api-commit.sh run to git vc: that is
   // the path this whole mechanism exists to avoid.
-  threw = false
+  let threw = false
   try {
     await before(
       { tool: "bash" },

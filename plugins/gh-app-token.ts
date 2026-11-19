@@ -662,6 +662,20 @@ function labelForSession(sessionID: string | undefined): string {
 }
 
 /**
+ * Rewrite an exact `git ... commit` invocation into the equivalent `git ... vc`
+ * invocation, so a plain `git commit` transparently becomes a Verified commit.
+ * Returns the rewritten command, or null when no exact `commit` subcommand is
+ * present (callers then fall back to redirecting the agent to `git vc`).
+ * Only the bare `commit` subcommand is rewritten: `commit-tree`, `commit-graph`
+ * and other plumbing keep their own meaning and are not touched here.
+ */
+function rewriteGitCommitToVc(cmd: string): string | null {
+  const re = /(\bgit(?:\.exe)?(?:\s+(?:-[cC]\s+\S+|--[a-z-]+(?:=\S+)?|-[a-zA-Z]))*\s+)commit(?=\s|$)/g
+  const out = cmd.replace(re, "$1vc")
+  return out !== cmd ? out : null
+}
+
+/**
  * `tool.execute.before` hook body: `git commit` under the App identity is
  * always unsigned (commit.gpgsign is forced to false above) and fails
  * "Commits must have verified signatures" branch rules, and api-commit.sh is
@@ -684,6 +698,19 @@ function redirectToVerifiedCommit(
     return
   }
   if (isGitCommitCommand(cmd)) {
+    // Transparent verified commit: an agent that types `git commit` (the
+    // ordinary, familiar command) gets it rewritten to `git vc` in place, so
+    // the same content is collected but GitHub creates and signs the commit.
+    // Only the exact `commit` subcommand (not `commit-tree` and friends) maps
+    // onto `git vc`; anything else falls through to the redirect below.
+    const rewritten = rewriteGitCommitToVc(cmd)
+    if (rewritten !== null) {
+      const target = args as { command?: unknown } | null
+      if (target && typeof target.command === "string") {
+        target.command = rewritten
+      }
+      return
+    }
     throw new Error(
       `Do not use \`git commit\`: commits made as ${botName} are unsigned and blocked by "Commits must have verified signatures" rules. ` +
         `Create a Verified commit instead: ${VC_USAGE} (the \`git vc\` alias collects staged changes, or tracked ones with -a, and lets GitHub sign the commit).`
