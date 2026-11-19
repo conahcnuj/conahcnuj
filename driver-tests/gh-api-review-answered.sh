@@ -16,25 +16,9 @@ export GH_API_TEST_MODE=1
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 
-python3 - "${TMP}/answered.json" <<'PY'
-import json, sys
-payload = {
-  "data": {"repository": {"pullRequest": {
-    "reviewDecision": "CHANGES_REQUESTED",
-    "reviews": {"nodes": []},
-    "comments": {"nodes": []},
-    "reviewThreads": {"nodes": [{
-      "isResolved": False,
-      "comments": {"nodes": [
-        {"databaseId": 201, "body": "Please fix the typo", "author": {"login": "reviewer"}},
-        {"databaseId": 202, "body": "Fixed in abc123", "author": {"login": "conahcnuj[bot]"}},
-      ]}
-    }]}
-  }}}
-}
-with open(sys.argv[1], "w") as f:
-    json.dump(payload, f)
-PY
+cat > "${TMP}/answered.json" <<'JSON'
+{"data":{"repository":{"pullRequest":{"reviewDecision":"CHANGES_REQUESTED","reviews":{"nodes":[]},"comments":{"nodes":[]},"reviewThreads":{"nodes":[{"isResolved":false,"comments":{"nodes":[{"databaseId":201,"body":"Please fix the typo","author":{"login":"reviewer"}},{"databaseId":202,"body":"Fixed in abc123","author":{"login":"conahcnuj[bot]"}}]}}]}}}}}
+JSON
 
 # review_summary keeps the bot-authored comment and its author.
 summary="$(gh_api_review_summary < "${TMP}/answered.json")"
@@ -47,23 +31,8 @@ threads="$(gh_api_unresolved_threads < "${TMP}/answered.json")"
 [[ "${threads}" == *"[comment 202 by conahcnuj[bot]] Fixed in abc123"* ]] || { echo "FAIL: bot comment missing from unresolved threads"; exit 1; }
 
 # A thread that is still open but only has a bot comment is still surfaced.
-python3 - "${TMP}/botonly.json" <<'PY'
-import json, sys
-payload = {
-  "data": {"repository": {"pullRequest": {
-    "reviewDecision": "CHANGES_REQUESTED",
-    "reviews": {"nodes": []},
-    "comments": {"nodes": []},
-    "reviewThreads": {"nodes": [{
-      "isResolved": False,
-      "comments": {"nodes": [
-        {"databaseId": 301, "body": "Already answered", "author": {"login": "conahcnuj[bot]"}},
-      ]}
-    }]}
-  }}}
-}
-with open(sys.argv[1], "w") as f:
-    json.dump(payload, f)
-PY
+cat > "${TMP}/botonly.json" <<'JSON'
+{"data":{"repository":{"pullRequest":{"reviewDecision":"CHANGES_REQUESTED","reviews":{"nodes":[]},"comments":{"nodes":[]},"reviewThreads":{"nodes":[{"isResolved":false,"comments":{"nodes":[{"databaseId":301,"body":"Already answered","author":{"login":"conahcnuj[bot]"}}]}}]}}}}}
+JSON
 threads2="$(gh_api_unresolved_threads < "${TMP}/botonly.json")"
 [[ "${threads2}" == *"[comment 301 by conahcnuj[bot]] Already answered"* ]] || { echo "FAIL: bot-only thread missing"; exit 1; }

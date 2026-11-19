@@ -21,6 +21,30 @@ trap '' PIPE
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GH_APP_DIR="${GH_APP_DIR:-${HERE}/../gh-app}"
 
+# Login of this driver's bot account (e.g. "conahcnuj[bot]"), used to tell the
+# bot's own in-thread replies apart from feedback posted by anyone else (a
+# human reviewer or another bot). Resolved from CONAHCNUJ_BOT_LOGIN, then
+# APP_SLUG (env or gh-app/app.env), then a default matching this repository.
+# app.env.example is deliberately NOT consulted: when app.env is unset there is
+# no configured slug to honour, so the default applies. (#983 review)
+gh_api_self_bot_login() {
+  local login="${CONAHCNUJ_BOT_LOGIN:-}"
+  if [[ -z "${login}" ]]; then
+    local slug="${APP_SLUG:-}"
+    if [[ -z "${slug}" ]]; then
+      local env_file="${GH_APP_DIR}/app.env"
+      if [[ -f "${env_file}" ]]; then
+        slug="$(sed -n 's/^[[:space:]]*APP_SLUG[[:space:]]*=[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "${env_file}" | head -1)"
+      fi
+    fi
+    if [[ -z "${slug}" || "${slug}" == "<your-app-name>" ]]; then
+      slug="conahcnuj"
+    fi
+    login="${slug}[bot]"
+  fi
+  printf '%s\n' "${login}"
+}
+
 # shellcheck source=lib/rate-limit.sh
 . "${HERE}/../lib/rate-limit.sh"
 
@@ -714,8 +738,8 @@ gh_api_review_fingerprint() {
   # must not look like new reviewer input, so drop the isResolved tokens. The
   # thread's comments still hash, which keeps a later resolution from
   # changing the fingerprint (no spurious round).
-  local self_bot="${CONAHCNUJ_BOT_LOGIN:-${APP_SLUG:+${APP_SLUG}[bot]}}"
-  self_bot="${self_bot:-conahcnuj[bot]}"
+  local self_bot
+  self_bot="$(gh_api_self_bot_login)"
   matches="$(grep -oE '\{"state":"[^"]*","body":"[^"]*","author":\{"login":"[^"]*"\}|\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*"' <<<"${raw}" 2>/dev/null | grep -vF "\"login\":\"${self_bot}\"" 2>/dev/null || true)"
   if [[ -z "${matches}" ]]; then
     # Only a decision that means "do work now" counts as feedback on its own;

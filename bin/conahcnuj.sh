@@ -171,21 +171,7 @@ pr_body_mark_synced() {
 # human reviewer or another bot). Resolved from CONAHCNUJ_BOT_LOGIN, then
 # APP_SLUG (env or gh-app/app.env), then a default matching this repository.
 conahcnuj_self_bot_login() {
-  local login="${CONAHCNUJ_BOT_LOGIN:-}"
-  if [[ -z "${login}" ]]; then
-    local slug="${APP_SLUG:-}"
-    if [[ -z "${slug}" ]]; then
-      local env_file="${GH_APP_DIR:-${HERE}/../gh-app}/app.env"
-      if [[ -f "${env_file}" ]]; then
-        slug="$(sed -n 's/^[[:space:]]*APP_SLUG[[:space:]]*=[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "${env_file}" | head -1)"
-      fi
-    fi
-    if [[ -z "${slug}" || "${slug}" == "<your-app-name>" ]]; then
-      slug="conahcnuj"
-    fi
-    login="${slug}[bot]"
-  fi
-  printf '%s\n' "${login}"
+  gh_api_self_bot_login
 }
 
 # --- Windows relaunch -------------------------------------------------------
