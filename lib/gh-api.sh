@@ -25,8 +25,6 @@ GH_APP_DIR="${GH_APP_DIR:-${HERE}/../gh-app}"
 # bot's own in-thread replies apart from feedback posted by anyone else (a
 # human reviewer or another bot). Resolved from CONAHCNUJ_BOT_LOGIN, then
 # APP_SLUG (env or gh-app/app.env), then a default matching this repository.
-# app.env.example is deliberately NOT consulted: when app.env is unset there is
-# no configured slug to honour, so the default applies. (#983 review)
 gh_api_self_bot_login() {
   local login="${CONAHCNUJ_BOT_LOGIN:-}"
   if [[ -z "${login}" ]]; then
@@ -37,7 +35,7 @@ gh_api_self_bot_login() {
         slug="$(sed -n 's/^[[:space:]]*APP_SLUG[[:space:]]*=[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "${env_file}" | head -1)"
       fi
     fi
-    if [[ -z "${slug}" || "${slug}" == "<your-app-name>" ]]; then
+    if [[ -z "${slug}" ]]; then
       slug="conahcnuj"
     fi
     login="${slug}[bot]"
