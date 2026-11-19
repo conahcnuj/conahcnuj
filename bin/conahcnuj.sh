@@ -166,6 +166,29 @@ pr_body_mark_synced() {
   printf '1\n' > "${PR_BODY_SYNCED_FILE}"
 }
 
+# Login of this driver's bot account (e.g. "conahcnuj[bot]"), used to tell the
+# bot's own in-thread replies apart from feedback posted by anyone else (a
+# human reviewer or another bot). Resolved from CONAHCNUJ_BOT_LOGIN, then
+# APP_SLUG (env or gh-app/app.env), then a default matching this repository.
+conahcnuj_self_bot_login() {
+  local login="${CONAHCNUJ_BOT_LOGIN:-}"
+  if [[ -z "${login}" ]]; then
+    local slug="${APP_SLUG:-}"
+    if [[ -z "${slug}" ]]; then
+      local env_file="${GH_APP_DIR:-${HERE}/../gh-app}/app.env"
+      [[ -f "${env_file}" ]] || env_file="${HERE}/../gh-app/app.env.example"
+      if [[ -f "${env_file}" ]]; then
+        slug="$(sed -n 's/^[[:space:]]*APP_SLUG[[:space:]]*=[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "${env_file}" | head -1)"
+      fi
+    fi
+    if [[ -z "${slug}" || "${slug}" == "<your-app-name>" ]]; then
+      slug="conahcnuj"
+    fi
+    login="${slug}[bot]"
+  fi
+  printf '%s\n' "${login}"
+}
+
 # --- Windows relaunch -------------------------------------------------------
 
 # The configured Git Bash: environment override > gh-app/app.env > the
@@ -1963,13 +1986,16 @@ drive() {
           : > TODO.jsonl
           while IFS= read -r _thread_line; do
             [[ -z "${_thread_line}" ]] && continue
-            # Bot-authored comments are replies the agent itself already posted;
-            # they are context for deciding whether to edit vs. reply, not new
-            # work items to seed into TODO.jsonl.
-            case "${_thread_line}" in
-              *"by "*"[bot]"*) continue ;;
-            esac
-            python3 -c 'import json,sys; print(json.dumps({"task": sys.argv[1]}))' "${_thread_line}" >> TODO.jsonl
+            # Comments authored by this bot itself are replies it already
+            # posted: they are context for deciding whether to edit vs. reply,
+            # not new work items to seed into TODO.jsonl. A reply posted by
+            # another bot is someone else's feedback and must be handled, so it
+            # is seeded like any other comment.
+            _self_bot="$(conahcnuj_self_bot_login)"
+            if [[ "${_thread_line}" == *"by ${_self_bot}"* ]]; then
+              continue
+            fi
+            printf '{"task":"%s"}\n' "$(gh_api_escape "${_thread_line}")" >> TODO.jsonl
           done <<<"${review_threads}"
           echo "Added review findings to TODO.jsonl." >&2
         fi

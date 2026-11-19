@@ -714,7 +714,9 @@ gh_api_review_fingerprint() {
   # must not look like new reviewer input, so drop the isResolved tokens. The
   # thread's comments still hash, which keeps a later resolution from
   # changing the fingerprint (no spurious round).
-  matches="$(grep -oE '\{"state":"[^"]*","body":"[^"]*","author":\{"login":"[^"]*"\}|\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*"' <<<"${raw}" 2>/dev/null | grep -vE '"author"[[:space:]]*:[[:space:]]*\{[[:space:]]*"login"[[:space:]]*:[[:space:]]*"[^"]*\[bot\]' 2>/dev/null || true)"
+  local self_bot="${CONAHCNUJ_BOT_LOGIN:-${APP_SLUG:+${APP_SLUG}[bot]}}"
+  self_bot="${self_bot:-conahcnuj[bot]}"
+  matches="$(grep -oE '\{"state":"[^"]*","body":"[^"]*","author":\{"login":"[^"]*"\}|\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*"' <<<"${raw}" 2>/dev/null | grep -vF "\"login\":\"${self_bot}\"" 2>/dev/null || true)"
   if [[ -z "${matches}" ]]; then
     # Only a decision that means "do work now" counts as feedback on its own;
     # REVIEW_REQUIRED / empty just mean "waiting for reviewers".
