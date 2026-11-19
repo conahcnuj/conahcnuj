@@ -264,14 +264,14 @@ for logfile in ${log_files[@]+"${log_files[@]}"}; do
     outcome="environment-down"
     severity="informational"
     title="environment-down: every model round died on an environment error"
-  elif [[ ${has_nomodel} -gt 0 ]]; then
-    outcome="no-model-completed"
-    severity="actionable"
-    title="no-model-completed: no available model completed the work"
   elif [[ ${has_budget} -gt 0 ]]; then
     outcome="time-budget-exhausted"
     severity="actionable"
     title="time-budget-exhausted: the driver stopped at its time budget"
+  elif [[ ${has_nomodel} -gt 0 ]]; then
+    outcome="no-model-completed"
+    severity="actionable"
+    title="no-model-completed: no available model completed the work"
   elif [[ ${has_bug} -gt 0 || ${has_abnormal} -gt 0 ]]; then
     outcome="bug-reported"
     severity="actionable"

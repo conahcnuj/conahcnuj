@@ -1252,7 +1252,7 @@ persist_missing_model() {
 # the other models.
 implement() {
   local title="${1}" body="${2}" extra="${3:-}" workdir model previous_model="" run_failed run_timeout now wrote_message provider tree_changed model_retried head_before head_after committed
-  local dead_providers="" quota_providers="" failed_rounds=0 env_failed_rounds=0 quota_failed_rounds=0 ran_without_failure=0
+  local dead_providers="" quota_providers="" failed_rounds=0 env_failed_rounds=0 quota_failed_rounds=0 ran_without_failure=0 time_budget_failed=0
   local model_list known_skipped=""
   local base_branch="${4:-}"
   local prompt_override="${5:-}"
@@ -1373,9 +1373,13 @@ implement() {
         elif [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
           echo "Model ${model} failed before completing the work: cancelled a request for input this run cannot answer; handing off to the next model." >&2
         elif [[ "${OPENCODE_ROUND_TIME_BUDGET_EXCEEDED}" == "true" ]]; then
-          echo "Model ${model} exceeded the remaining driver time budget; stopping." >&2
-          echo "ERROR: time budget (${MAX_DURATION}s) exhausted while waiting. Exiting." >&2
-          exit 1
+          time_budget_failed=1
+          # The driver's overall time budget is shared by every model/agent,
+          # but a round that trips it (or an opencode-side limit) need not end
+          # the whole run: hand off to the next model the way a rate limit
+          # does, and let check_timeout stop the loop once the budget is truly
+          # gone. Other agents may still be executable when one is not.
+          echo "Model ${model} exceeded the remaining driver time budget; trying the next model." >&2
         else
           echo "Model ${model} failed before completing the work; handing off to the next model." >&2
         fi
@@ -1400,7 +1404,12 @@ implement() {
       fi
     done
   done
-  echo "ERROR: no available model completed the work (tried: ${OPENCODE_USED_MODELS:-none}; handoffs: ${OPENCODE_HANDOFFS:-none})." >&2
+  if [[ "${time_budget_failed}" != "1" ]]; then
+    echo "ERROR: no available model completed the work (tried: ${OPENCODE_USED_MODELS:-none}; handoffs: ${OPENCODE_HANDOFFS:-none})." >&2
+  fi
+  if [[ "${time_budget_failed}" == "1" ]]; then
+    echo "ERROR: time budget (${MAX_DURATION}s) exhausted while waiting. Exiting." >&2
+  fi
   if [[ "${failed_rounds}" -gt 0 && "$((env_failed_rounds + quota_failed_rounds))" -eq "${failed_rounds}" ]]; then
     ENVIRONMENT_DOWN="1"
     echo "ERROR: every model round died on an environment error (provider unreachable, credentials rejected, or quota/billing exhausted; providers given up on:${dead_providers}${quota_providers}). Nothing the driver can do about that -- re-run it once its providers are usable again." >&2
