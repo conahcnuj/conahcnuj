@@ -1963,6 +1963,12 @@ drive() {
           : > TODO.jsonl
           while IFS= read -r _thread_line; do
             [[ -z "${_thread_line}" ]] && continue
+            # Bot-authored comments are replies the agent itself already posted;
+            # they are context for deciding whether to edit vs. reply, not new
+            # work items to seed into TODO.jsonl.
+            case "${_thread_line}" in
+              *"by "*"[bot]"*) continue ;;
+            esac
             python3 -c 'import json,sys; print(json.dumps({"task": sys.argv[1]}))' "${_thread_line}" >> TODO.jsonl
           done <<<"${review_threads}"
           echo "Added review findings to TODO.jsonl." >&2
