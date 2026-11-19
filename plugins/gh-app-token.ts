@@ -465,6 +465,7 @@ import {
   API_COMMIT_SCRIPT,
   isDirectApiCommitCommand,
   isGitCommitCommand,
+  rewriteGitCommitToVc,
 } from "./lib/gh-app-commit"
 
 interface ShellIdentity {
@@ -659,20 +660,6 @@ function labelForSession(sessionID: string | undefined): string {
     return ""
   }
   return formatModelLabel(seen.provider, seen.model, seen.effort)
-}
-
-/**
- * Rewrite an exact `git ... commit` invocation into the equivalent `git ... vc`
- * invocation, so a plain `git commit` transparently becomes a Verified commit.
- * Returns the rewritten command, or null when no exact `commit` subcommand is
- * present (callers then fall back to redirecting the agent to `git vc`).
- * Only the bare `commit` subcommand is rewritten: `commit-tree`, `commit-graph`
- * and other plumbing keep their own meaning and are not touched here.
- */
-function rewriteGitCommitToVc(cmd: string): string | null {
-  const re = /(\bgit(?:\.exe)?(?:\s+(?!commit(?:\s|$))\S+)*\s+)commit(?=\s|$)/g
-  const out = cmd.replace(re, "$1vc")
-  return out !== cmd ? out : null
 }
 
 /**
