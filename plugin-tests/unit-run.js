@@ -213,8 +213,9 @@ const GIT_COMMIT_COMMANDS = [
   "git -C /tmp/repo commit -m x",
   "git -c user.email=a@b commit -m x",
   "git --no-pager commit -m x",
-  // Plumbing commit creators are unsigned too.
-  "git commit-tree HEAD -m x",
+  // Plumbing commit creators are unsigned too and are not transparently
+  // rewritten (they keep their own meaning); they are still redirected.
+
   // Reached through separators, assignments and shell wrappers.
   "cd repo && git commit -m x",
   "git status; git commit -m x",
@@ -235,6 +236,10 @@ const GIT_COMMIT_COMMANDS = [
   "command git commit -m x",
   "time git commit -m x",
   "sudo bash -c 'git commit -m x'",
+]
+
+const GIT_COMMIT_BLOCKED_COMMANDS = [
+  "git commit-tree HEAD -m x",
 ]
 
 const GIT_ALLOWED_COMMANDS = [
@@ -265,9 +270,28 @@ const GIT_ALLOWED_COMMANDS = [
   "env -v",
 ]
 
-test("redirects: git commit (any form) points at git vc", async () => {
+async function assertRewritten(commands) {
+  const plugin = await freshHooks()
+  for (const command of commands) {
+    const args = { command }
+    await plugin["tool.execute.before"]({ tool: "bash" }, { args, env: {} })
+    assert.ok(
+      typeof args.command === "string" &&
+        args.command !== command &&
+        !/commit(?=\s|$)/.test(args.command),
+      `not rewritten to git vc: ${command} -> ${args.command}`
+    )
+  }
+}
+
+test("rewrites: git commit (any form) runs as git vc transparently", async () => {
   stage()
-  await assertRedirected(GIT_COMMIT_COMMANDS, "git commit")
+  await assertRewritten(GIT_COMMIT_COMMANDS)
+})
+
+test("redirects: non-rewritable git commit forms still point at git vc", async () => {
+  stage()
+  await assertRedirected(GIT_COMMIT_BLOCKED_COMMANDS, "git commit")
 })
 
 test("redirects: everything else git-ish keeps working", async () => {
@@ -278,7 +302,7 @@ test("redirects: everything else git-ish keeps working", async () => {
 test("redirects: the git commit message names the bot, the rule and the usage", async () => {
   stage()
   const plugin = await freshHooks()
-  const message = await redirect(plugin, "bash", { command: 'git commit -m "x"' })
+  const message = await redirect(plugin, "bash", { command: 'git commit-tree HEAD -m x' })
   assert.ok(message !== null, "git commit was not blocked")
   assert.ok(message.includes(`commits made as ${BOT} are unsigned`), message)
   assert.ok(message.includes("Commits must have verified signatures"), message)

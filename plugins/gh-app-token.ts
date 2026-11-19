@@ -465,6 +465,7 @@ import {
   API_COMMIT_SCRIPT,
   isDirectApiCommitCommand,
   isGitCommitCommand,
+  rewriteGitCommitToVc,
 } from "./lib/gh-app-commit"
 
 interface ShellIdentity {
@@ -684,6 +685,19 @@ function redirectToVerifiedCommit(
     return
   }
   if (isGitCommitCommand(cmd)) {
+    // Transparent verified commit: an agent that types `git commit` (the
+    // ordinary, familiar command) gets it rewritten to `git vc` in place, so
+    // the same content is collected but GitHub creates and signs the commit.
+    // Only the exact `commit` subcommand (not `commit-tree` and friends) maps
+    // onto `git vc`; anything else falls through to the redirect below.
+    const rewritten = rewriteGitCommitToVc(cmd)
+    if (rewritten !== null) {
+      const target = args as { command?: unknown } | null
+      if (target && typeof target.command === "string") {
+        target.command = rewritten
+      }
+      return
+    }
     throw new Error(
       `Do not use \`git commit\`: commits made as ${botName} are unsigned and blocked by "Commits must have verified signatures" rules. ` +
         `Create a Verified commit instead: ${VC_USAGE} (the \`git vc\` alias collects staged changes, or tracked ones with -a, and lets GitHub sign the commit).`
