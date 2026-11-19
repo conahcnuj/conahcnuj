@@ -176,7 +176,6 @@ conahcnuj_self_bot_login() {
     local slug="${APP_SLUG:-}"
     if [[ -z "${slug}" ]]; then
       local env_file="${GH_APP_DIR:-${HERE}/../gh-app}/app.env"
-      [[ -f "${env_file}" ]] || env_file="${HERE}/../gh-app/app.env.example"
       if [[ -f "${env_file}" ]]; then
         slug="$(sed -n 's/^[[:space:]]*APP_SLUG[[:space:]]*=[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "${env_file}" | head -1)"
       fi
