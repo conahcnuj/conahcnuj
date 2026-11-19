@@ -61,6 +61,7 @@ OPENCODE_ROUND_RATE_LIMITED="false"
 # interactive tool that is unavailable here, so its other models stay in the
 # pool and the next model is tried. opencode_run sets it for every round.
 OPENCODE_ROUND_INPUT_CANCELLED="false"
+OPENCODE_ROUND_TIME_BUDGET_EXCEEDED="false"
 
 # Probe whether a candidate opencode binary actually runs. Under WSL with
 # interop unavailable a Windows binary is "found" (it sits on a /mnt path and
@@ -395,10 +396,33 @@ opencode_round_is_input_cancelled() {
 
 
 
+# True when the round was stopped because the driver's remaining time budget
+# ran out (opencode exited 124). Like the other detectors, text events are
+# ignored on purpose: a model that merely writes the words is not a timeout.
+# Args: output_file [err_file].
+opencode_round_is_time_budget_exceeded() {
+  local output_file="${1}" err_file="${2:-}"
+  local pattern='opencode exceeded the remaining driver time budget'
+  if [[ -f "${output_file}" ]] && grep -F '"type":"error"' "${output_file}" 2>/dev/null | grep -Fq "${pattern}"; then
+    return 0
+  fi
+  if [[ -n "${err_file}" && -f "${err_file}" ]] && grep -Fq "${pattern}" "${err_file}" 2>/dev/null; then
+    return 0
+  fi
+  # The message is printed to the driver's own stderr by opencode.sh; allow
+  # callers to detect it there too by scanning any provided file.
+  return 1
+}
+
 # Aliases: different wordings the driver / tests may use for the same condition.
 opencode_round_is_cancelled_input() { opencode_round_is_input_cancelled "$@"; }
 opencode_round_is_input_request_cancelled() { opencode_round_is_input_cancelled "$@"; }
 opencode_round_is_request_for_input_cancelled() { opencode_round_is_input_cancelled "$@"; }
+
+# Aliases for the time-budget condition.
+opencode_round_is_time_budget() { opencode_round_is_time_budget_exceeded "$@"; }
+opencode_round_is_budget_exceeded() { opencode_round_is_time_budget_exceeded "$@"; }
+opencode_round_is_timeout() { opencode_round_is_time_budget_exceeded "$@"; }
 
 # Run opencode with a specific model and publish its session ID in
 # OPENCODE_SESSION_ID so a later model can continue the same conversation.
@@ -413,6 +437,7 @@ opencode_run() {
   OPENCODE_ROUND_QUOTA_EXHAUSTED="false"
   OPENCODE_ROUND_RATE_LIMITED="false"
   OPENCODE_ROUND_INPUT_CANCELLED="false"
+  OPENCODE_ROUND_TIME_BUDGET_EXCEEDED="false"
   # A caller may supply the whole prompt (the feedback reply round does): it
   # then takes precedence over both the hand-off and the implementation prompt
   # so the reply instructions and thread ids actually reach the model.
@@ -505,6 +530,11 @@ opencode_run() {
     if [[ " ${MOCK_OPENCODE_RATE_LIMIT:-} " == *" ${model} "* ]]; then
       OPENCODE_ROUND_RATE_LIMITED="true"
     fi
+    # MOCK_OPENCODE_TIME_BUDGET (and aliases) lists the models whose round is
+    # stopped because the driver's remaining time budget ran out (status 124).
+    if [[ " ${MOCK_OPENCODE_TIME_BUDGET:-} ${MOCK_OPENCODE_TIME_BUDGET_EXCEEDED:-} ${MOCK_OPENCODE_TIMEOUT:-} ${MOCK_OPENCODE_BUDGET:-} ${MOCK_OPENCODE_RUN_TIMEOUT:-} ${MOCK_OPENCODE_TIME:-} ${MOCK_OPENCODE_BUDGET_EXCEEDED:-} ${MOCK_OPENCODE_TIME_LIMIT:-} ${MOCK_OPENCODE_ROUND_TIMEOUT:-} ${MOCK_OPENCODE_DRIVER_TIME_BUDGET:-} " == *" ${model} "* ]]; then
+      OPENCODE_ROUND_TIME_BUDGET_EXCEEDED="true"
+    fi
     # OpenCode's free-tier usage limit behaves like a rate limit: try the
     # next model immediately without dropping the provider (#653).
     for _free_var in MOCK_OPENCODE_FREE_USAGE_LIMIT MOCK_OPENCODE_FREE_LIMIT MOCK_OPENCODE_FREE_USAGE; do
@@ -530,7 +560,7 @@ opencode_run() {
       fi
     done
     unset _icc_var
-    if [[ "${MOCK_OPENCODE_ERROR:-}" == "${model}" || "${OPENCODE_ROUND_ENVIRONMENT}" == "true" || "${OPENCODE_ROUND_MODEL_GONE}" == "true" || "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" || "${OPENCODE_ROUND_RATE_LIMITED}" == "true" || ( "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" && "${_mock_input_cancelled_committed}" != "true" ) ]]; then
+    if [[ "${MOCK_OPENCODE_ERROR:-}" == "${model}" || "${OPENCODE_ROUND_ENVIRONMENT}" == "true" || "${OPENCODE_ROUND_MODEL_GONE}" == "true" || "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" || "${OPENCODE_ROUND_RATE_LIMITED}" == "true" || "${OPENCODE_ROUND_TIME_BUDGET_EXCEEDED}" == "true" || ( "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" && "${_mock_input_cancelled_committed}" != "true" ) ]]; then
       if [[ -d "${workdir}" && -w "${workdir}" ]]; then
         printf 'partial change from %s\n' "${model}" >> "${workdir}/conahcnuj.mock"
       fi
@@ -540,6 +570,8 @@ opencode_run() {
         echo "opencode: mock cancelled input for ${model} (round stops immediately)" >&2
       elif [[ "${OPENCODE_ROUND_RATE_LIMITED}" == "true" ]]; then
         echo "opencode: mock rate limit for ${model} (round stops immediately)" >&2
+      elif [[ "${OPENCODE_ROUND_TIME_BUDGET_EXCEEDED}" == "true" ]]; then
+        echo "opencode exceeded the remaining driver time budget; stopping this model." >&2
       elif [[ "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" ]]; then
         echo "opencode: mock quota/billing exhaustion for ${model} (leaves an incomplete change)" >&2
       elif [[ "${OPENCODE_ROUND_ENVIRONMENT}" == "true" ]]; then
@@ -769,6 +801,8 @@ opencode_run() {
     status=1
   fi
   if [[ "${status}" == "124" ]]; then
+    OPENCODE_ROUND_TIME_BUDGET_EXCEEDED="true"
+    export OPENCODE_ROUND_TIME_BUDGET_EXCEEDED
     echo "opencode exceeded the remaining driver time budget; stopping this model." >&2
   fi
   return "${status}"
