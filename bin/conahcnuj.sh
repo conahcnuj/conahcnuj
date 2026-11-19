@@ -2126,7 +2126,7 @@ ${summary}"
     # run does not end here; the next loop iteration waits for the verdict.
     if [[ "${decision}" == "null" || -z "${decision}" ]]; then
       if [[ -z "${unresolved_threads}" ]]; then
-        if [[ "${CONAHCNUJ_VERBOSE:-0}" == "1" || "${CONAHCNUJ_VERBOSE:-}" == "true" ]]; then
+        if [[ "${CONAHCNUJ_VERBOSE:-0}" == "1" || "${CONAHCNUJ_VERBOSE:-}" == "true" || "${CONAHCNUJ_DEBUG:-0}" == "1" || "${CONAHCNUJ_DEBUG:-}" == "true" || "${VERBOSE:-0}" == "1" || "${VERBOSE:-}" == "true" ]]; then
           echo "PR #${pr}: reviewer has an unfinished (unsubmitted) review; waiting for it to be submitted." >&2
         fi
         handed_off="true"
