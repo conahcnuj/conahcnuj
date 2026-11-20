@@ -52,4 +52,3 @@ grep -q "environment error" "${LOG}" && { echo "FAIL: diagnosed as environment e
 grep -q "Skipping" "${LOG}" && { echo "FAIL: provider skipped"; exit 1; }
 grep -q "Bug report issue #25 created" "${LOG}" || { echo "FAIL: no bug report"; cat "${LOG}"; exit 1; }
 
-echo "conahcnuj time-budget handling passed"

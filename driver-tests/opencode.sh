@@ -521,7 +521,6 @@ test_opencode_round_is_time_budget_exhausted() {
   : > "${err}"
   opencode_round_is_time_budget_exhausted "${out}" "${err}" && { echo "FAIL: empty stream classified as time budget exhausted"; exit 1; }
   rm -rf "${dir}"
-  echo "opencode_round_is_time_budget_exhausted passed"
 }
 
 test_opencode_run_rate_limit() {
