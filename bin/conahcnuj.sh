@@ -166,6 +166,14 @@ pr_body_mark_synced() {
   printf '1\n' > "${PR_BODY_SYNCED_FILE}"
 }
 
+# Login of this driver's bot account (e.g. "conahcnuj[bot]"), used to tell the
+# bot's own in-thread replies apart from feedback posted by anyone else (a
+# human reviewer or another bot). Resolved from CONAHCNUJ_BOT_LOGIN, then
+# APP_SLUG (env or gh-app/app.env), then a default matching this repository.
+conahcnuj_self_bot_login() {
+  gh_api_self_bot_login
+}
+
 # --- Windows relaunch -------------------------------------------------------
 
 # The configured Git Bash: environment override > gh-app/app.env > the
@@ -1962,7 +1970,16 @@ drive() {
           : > TODO.jsonl
           while IFS= read -r _thread_line; do
             [[ -z "${_thread_line}" ]] && continue
-            python3 -c 'import json,sys; print(json.dumps({"task": sys.argv[1]}))' "${_thread_line}" >> TODO.jsonl
+            # Comments authored by this bot itself are replies it already
+            # posted: they are context for deciding whether to edit vs. reply,
+            # not new work items to seed into TODO.jsonl. A reply posted by
+            # another bot is someone else's feedback and must be handled, so it
+            # is seeded like any other comment.
+            _self_bot="$(conahcnuj_self_bot_login)"
+            if [[ "${_thread_line}" == *"by ${_self_bot}"* ]]; then
+              continue
+            fi
+            printf '{"task":"%s"}\n' "$(gh_api_escape "${_thread_line}")" >> TODO.jsonl
           done <<<"${review_threads}"
           echo "Added review findings to TODO.jsonl." >&2
         fi
@@ -2007,7 +2024,7 @@ ${summary}"
       # Checks pass and the branch merges: now it is safe to reply in the
       # review threads (push -> CI -> comment -> request review). The reply
       # round uses a prompt override so the thread ids reach the model.
-      local reply_prompt="The pull request branch has been updated and every check passes with no merge conflict. Reply in each unresolved review thread below with one short, factual reply per thread (what changed or the answer to the question). Post it through the GitHub API (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies is the reply endpoint; \${GH_TOKEN} is set) using the comment id shown for each thread. Do not make code changes, do not commit, and do not request review.
+      local reply_prompt="The pull request branch has been updated and every check passes with no merge conflict. Reply in each unresolved review thread below with one short, factual reply per thread (what changed or the answer to the question). If a thread's last comment is by you (the bot), do not post a new comment: edit that latest comment instead (PATCH https://api.github.com/repos/${owner}/${repo}/pulls/comments/<comment_id> with a JSON body {\"body\":\"...\"}). Otherwise post a new reply (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies). Re-check the thread's last comment right before you act: if a reviewer replied while you were composing, post a new reply instead of editing (never clobber a newer reviewer reply). Use \${GH_TOKEN} for auth and the comment id shown for each thread. Do not make code changes, do not commit, and do not request review.
 
 ${summary}"
       if ! implement "${title}" "${body}" "" "${base}" "${reply_prompt}"; then
@@ -2113,7 +2130,7 @@ ${summary}"
     # conflict-free, before handing the PR back (push -> CI -> comment ->
     # request review).
     if [[ "${reply_pending}" == "true" ]]; then
-      local reply_prompt="The pull request branch has been updated and every check passes with no merge conflict. Reply in each unresolved review thread below with one short, factual reply per thread (what changed or the answer to the question). Post it through the GitHub API (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies is the reply endpoint; \${GH_TOKEN} is set) using the comment id shown for each thread. Do not make code changes, do not commit, and do not request review.
+      local reply_prompt="The pull request branch has been updated and every check passes with no merge conflict. Reply in each unresolved review thread below with one short, factual reply per thread (what changed or the answer to the question). If a thread's last comment is by you (the bot), do not post a new comment: edit that latest comment instead (PATCH https://api.github.com/repos/${owner}/${repo}/pulls/comments/<comment_id> with a JSON body {\"body\":\"...\"}). Otherwise post a new reply (POST https://api.github.com/repos/${owner}/${repo}/pulls/${pr}/comments/<comment_id>/replies). Re-check the thread's last comment right before you act: if a reviewer replied while you were composing, post a new reply instead of editing (never clobber a newer reviewer reply). Use \${GH_TOKEN} for auth and the comment id shown for each thread. Do not make code changes, do not commit, and do not request review.
 
 ${summary}"
       if ! implement "${title}" "${body}" "" "${base}" "${reply_prompt}"; then

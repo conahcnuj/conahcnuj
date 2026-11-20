@@ -21,6 +21,28 @@ trap '' PIPE
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GH_APP_DIR="${GH_APP_DIR:-${HERE}/../gh-app}"
 
+# Login of this driver's bot account (e.g. "conahcnuj[bot]"), used to tell the
+# bot's own in-thread replies apart from feedback posted by anyone else (a
+# human reviewer or another bot). Resolved from CONAHCNUJ_BOT_LOGIN, then
+# APP_SLUG (env or gh-app/app.env), then a default matching this repository.
+gh_api_self_bot_login() {
+  local login="${CONAHCNUJ_BOT_LOGIN:-}"
+  if [[ -z "${login}" ]]; then
+    local slug="${APP_SLUG:-}"
+    if [[ -z "${slug}" ]]; then
+      local env_file="${GH_APP_DIR}/app.env"
+      if [[ -f "${env_file}" ]]; then
+        slug="$(sed -n 's/^[[:space:]]*APP_SLUG[[:space:]]*=[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "${env_file}" | head -1)"
+      fi
+    fi
+    if [[ -z "${slug}" ]]; then
+      slug="conahcnuj"
+    fi
+    login="${slug}[bot]"
+  fi
+  printf '%s\n' "${login}"
+}
+
 # shellcheck source=lib/rate-limit.sh
 . "${HERE}/../lib/rate-limit.sh"
 
@@ -551,19 +573,14 @@ gh_api_review_summary() {
           let printedHeader = false;
           for (const t of unresolved) {
             const comments = (t.comments && t.comments.nodes) || [];
-            // A thread whose last reply is by the bot itself has already been
-            // answered; do not present it again (it would only produce a
-            // duplicate reply). Re-surface it once a reviewer follows up.
-            if (comments.length > 0) {
-              const last = comments[comments.length - 1];
-              const lastAuthor = (last.author && last.author.login) || "";
-              if (/\[bot\]/.test(lastAuthor)) continue;
-            }
+            // Surface every unresolved thread, including ones the bot has
+            // already answered: instead of posting a duplicate reply there, the
+            // bot edits its latest comment. The last comment author tells the
+            // agent which action applies.
             if (!printedHeader) { console.log("REVIEW THREADS (unresolved):"); printedHeader = true; }
             for (const c of comments) {
               const id = c.databaseId;
               const author = (c.author && c.author.login) || "unknown";
-              if (/\[bot\]/.test(author)) continue;
               let body = c.body;
               if (body === undefined || body === null || body === "") body = "(no body)";
 
@@ -635,16 +652,12 @@ gh_api_format_unresolved_threads() {
           for (const t of nodes) {
             if (t.isResolved) continue;
             const comments = (t.comments && t.comments.nodes) || [];
-            // Skip threads already answered by the bot (last comment by bot).
-            if (comments.length > 0) {
-              const last = comments[comments.length - 1];
-              const lastAuthor = (last.author && last.author.login) || "";
-              if (/\[bot\]/.test(lastAuthor)) continue;
-            }
+            // Surface every unresolved thread, including ones the bot has
+            // already answered (the bot edits its latest comment instead of
+            // posting a duplicate reply).
             for (const c of comments) {
               const id = c.databaseId;
               const author = (c.author && c.author.login) || "unknown";
-              if (/\[bot\]/.test(author)) continue;
               let body = c.body;
               if (body === undefined || body === null || body === "") body = "(no body)";
               const esc = JSON.stringify(String(body)).slice(1, -1);
@@ -667,18 +680,12 @@ gh_api_format_unresolved_threads() {
 
   while IFS= read -r tn; do
     [[ -z "${tn}" ]] && continue
-    # Skip threads whose last comment is by the bot (already answered).
-    local last_author
-    last_author="$(grep -oE '"login"[[:space:]]*:[[:space:]]*"[^"]*"' <<<"${tn}" | tail -n 1 | sed -E 's/.*"login"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' 2>/dev/null || true)"
-    [[ "${last_author}" == *"[bot]"* ]] && continue
     local cn cid ca cb printed="false"
     while IFS= read -r cn; do
       [[ -z "${cn}" ]] && continue
       cid="$(gh_api_json_num "${cn}" "databaseId")"
       ca="$(gh_api_json_str "${cn}" "login")"
       cb="$(gh_api_json_str "${cn}" "body")"
-      # Skip comments authored by the bot itself.
-      [[ "${ca}" == *"[bot]"* ]] && continue
       [[ -n "${cb}" ]] || cb="(no body)"
       printed="true"
       if [[ -n "${cid}" ]]; then
@@ -709,7 +716,9 @@ gh_api_review_fingerprint() {
   # must not look like new reviewer input, so drop the isResolved tokens. The
   # thread's comments still hash, which keeps a later resolution from
   # changing the fingerprint (no spurious round).
-  matches="$(grep -oE '\{"state":"[^"]*","body":"[^"]*","author":\{"login":"[^"]*"\}|\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*"' <<<"${raw}" 2>/dev/null | grep -vE '"author"[[:space:]]*:[[:space:]]*\{[[:space:]]*"login"[[:space:]]*:[[:space:]]*"[^"]*\[bot\]' 2>/dev/null || true)"
+  local self_bot
+  self_bot="$(gh_api_self_bot_login)"
+  matches="$(grep -oE '\{"state":"[^"]*","body":"[^"]*","author":\{"login":"[^"]*"\}|\{"databaseId":[0-9]+,"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*","author":\{"login":"[^"]*"\}|\{"body":"[^"]*"' <<<"${raw}" 2>/dev/null | grep -vF "\"login\":\"${self_bot}\"" 2>/dev/null || true)"
   if [[ -z "${matches}" ]]; then
     # Only a decision that means "do work now" counts as feedback on its own;
     # REVIEW_REQUIRED / empty just mean "waiting for reviewers".
