@@ -789,6 +789,9 @@ opencode_run() {
   if [[ "${status}" != "0" ]] && { [[ "${rate_aborted}" == "true" ]] || opencode_round_is_rate_limited "${output_file}" "${err_file}"; }; then
     OPENCODE_ROUND_RATE_LIMITED="true"
   fi
+  if [[ "${status}" != "0" ]] && opencode_round_is_time_budget_exhausted "${output_file}" "${err_file}"; then
+    OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED="true"
+  fi
   # A cancelled input request is a terminal failure of the round even when the
   # backend happens to exit zero, so classify it independent of the exit status
   # and force a non-zero result; otherwise the round could be reported as
@@ -803,7 +806,7 @@ opencode_run() {
     export OPENCODE_SESSION_ID
   fi
   rm -f "${output_file}" "${prompt_file}" "${err_file}"
-  if [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
+  if [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" || "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
     status=1
   fi
   if [[ "${status}" == "124" ]]; then
