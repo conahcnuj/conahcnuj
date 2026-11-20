@@ -1361,6 +1361,25 @@ implement() {
         OPENCODE_LAST_MODEL="${model}"
         return 0
       fi
+      # A model that changes nothing and writes no .commit-msg can still be a
+      # complete round when the branch already carries the implementation: there
+      # is simply nothing left to do, so the model's silence is the deliverable
+      # rather than a failed round. Accepting it keeps the driver from looping
+      # through every model (and eventually exhausting the time budget) on a
+      # branch an earlier run already finished (#995).
+      _model_real_change="false"
+      if workdir_changed "${workdir}"; then
+        if git -C "${workdir}" status --porcelain 2>/dev/null | grep -vE '\.commit-msg|\.branch-name|TODO\.jsonl' | grep -q .; then
+          _model_real_change="true"
+        fi
+      fi
+      if [[ "${_model_real_change}" == "false" && "${wrote_message}" == "false" && "${run_failed}" == "false" ]] && branch_has_commits "" "${base_branch}"; then
+        rm -f "${workdir}/.commit-msg"
+        echo "Model ${model} found the branch already implemented and made no changes; the round is complete." >&2
+        echo "Model ${model} wrote .commit-msg and left the tree as it was; the branch already carries the implementation, so the round is complete." >&2
+        OPENCODE_LAST_MODEL="${model}"
+        return 0
+      fi
       rm -f "${workdir}/.commit-msg"
       previous_model="${model}"
       if [[ "${run_failed}" == "true" ]]; then
