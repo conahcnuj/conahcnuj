@@ -1373,13 +1373,15 @@ implement() {
         elif [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
           echo "Model ${model} failed before completing the work: cancelled a request for input this run cannot answer; handing off to the next model." >&2
         elif [[ "${OPENCODE_ROUND_TIME_BUDGET_EXCEEDED}" == "true" ]]; then
+          # This is the DRIVER''s overall time budget, not an opencode-internal
+          # one: opencode has no time budget of its own, and status 124 comes
+          # from the `timeout` wrapper around opencode using the remaining
+          # driver budget. Other models/agents may still be runnable when one
+          # round trips it, so we only stop the whole run when the driver
+          # budget is genuinely exhausted (real clock); otherwise hand off to
+          # the next model, and let check_timeout catch true exhaustion.
           # The message is printed by opencode.sh when the per-round `timeout`
-          # fires (status 124). That can be the driver's own overall budget
-          # actually running out (fatal: no other model/agent can run) OR a
-          # spurious/per-round timeout while budget remains (other models may
-          # still be executable). Distinguish by the real clock: only stop the
-          # run when the driver's budget is genuinely exhausted; otherwise hand
-          # off to the next model, and let check_timeout catch true exhaustion.
+          # fires (status 124).
           if time_budget_exhausted; then
             time_budget_failed=1
             echo "Model ${model} exceeded the remaining driver time budget; stopping." >&2
