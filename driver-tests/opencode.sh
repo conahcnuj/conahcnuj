@@ -500,6 +500,29 @@ test_opencode_round_is_quota_exhausted() {
   echo "opencode_round_is_quota_exhausted passed"
 }
 
+test_opencode_round_is_time_budget_exhausted() {
+  local dir out err
+  dir="$(mktemp -d)"
+  out="${dir}/out.jsonl"
+  err="${dir}/err.log"
+  # The driver's own message when opencode is killed by the per-round timeout.
+  printf '%s\n' 'opencode exceeded the remaining driver time budget; stopping this model.' > "${out}"
+  : > "${err}"
+  opencode_round_is_time_budget_exhausted "${out}" "${err}" || { echo "FAIL: stdout message not classified"; exit 1; }
+  # The same message on opencode's own stderr counts too.
+  : > "${out}"
+  printf '%s\n' 'opencode exceeded the remaining driver time budget; stopping this model.' > "${err}"
+  opencode_round_is_time_budget_exhausted "${out}" "${err}" || { echo "FAIL: stderr message not classified"; exit 1; }
+  # A model that writes the words in its answer is not time-budget-exhausted.
+  printf '%s\n' '{"type":"text","part":{"type":"text","text":"opencode exceeded the remaining driver time budget; stopping this model."}}' > "${out}"
+  printf 'booted provider x\n' > "${err}"
+  opencode_round_is_time_budget_exhausted "${out}" "${err}" && { echo "FAIL: model text classified as time budget exhausted"; exit 1; }
+  : > "${out}"
+  : > "${err}"
+  opencode_round_is_time_budget_exhausted "${out}" "${err}" && { echo "FAIL: empty stream classified as time budget exhausted"; exit 1; }
+  rm -rf "${dir}"
+}
+
 test_opencode_run_rate_limit() {
   export OPENCODE_TEST_MODE=1
   export MOCK_OPENCODE_RATE_LIMIT="opencode/limited opencode/also-limited"
@@ -569,6 +592,7 @@ test_opencode_run_renders_log
 test_opencode_run_timeout
 test_opencode_round_is_rate_limited
 test_opencode_round_is_quota_exhausted
+test_opencode_round_is_time_budget_exhausted
 test_opencode_run_rate_limit
 test_opencode_run_quota
 
