@@ -49,12 +49,13 @@ unsigned コミットを塞ぐプラグインです。ファイルは `plugins/g
   シェルの `timeout` や `Start-Sleep` ではなく、ツール呼び出しの
   `timeout`（ミリ秒）を大きくして実行するよう伝える（#629）。
 
-### `tool.execute.before` - `git commit` のブロック
+### `tool.execute.before` - `git commit` の透過的な Verified コミット化
 
 bash ツールが `git commit`（`git.exe commit`、`-C <dir> commit` も含む）を呼ぼうと
-すると、`Commits must have verified signatures` でブロックされる旨と代替手段
-（`git vc -m "<メッセージ>" [-a]`）を示すエラーで失敗させます。他の git サブコマンドは
-通します。
+すると、コマンドをその場で `git vc` に書き換えます。エージェントがふつうに
+`git commit` を使っても、裏では Verified コミット（`git vc`）として実行されます。
+`git commit-tree` のような plumbing は書き換え対象外で、従来どおり `git vc` へ
+誘導されます。他の git サブコマンドは通します。
 
 ### `chat.message` / `chat.params` - モデルラベルの記録
 
