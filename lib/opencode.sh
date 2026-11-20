@@ -355,7 +355,7 @@ opencode_round_is_quota_exhausted() {
 # this model." (status 124). Args: output_file [err_file].
 opencode_round_is_time_budget_exhausted() {
   local output_file="${1}" err_file="${2:-}"
-  if [[ -f "${output_file}" ]] && grep -Fq "opencode exceeded the remaining driver time budget" "${output_file}" 2>/dev/null; then
+  if [[ -f "${output_file}" ]] && grep -F "opencode exceeded the remaining driver time budget" "${output_file}" 2>/dev/null | grep -vF '"type":"text"' | grep -q .; then
     return 0
   fi
   if [[ -n "${err_file}" && -f "${err_file}" ]] && grep -Fq "opencode exceeded the remaining driver time budget" "${err_file}" 2>/dev/null; then
@@ -367,6 +367,11 @@ opencode_round_is_time_budget_exhausted() {
 # Aliases: different wordings the driver / tests may use for the same condition.
 opencode_round_is_time_budget_exceeded() { opencode_round_is_time_budget_exhausted "$@"; }
 opencode_round_is_budget_exhausted() { opencode_round_is_time_budget_exhausted "$@"; }
+opencode_round_is_time_budget() { opencode_round_is_time_budget_exhausted "$@"; }
+opencode_round_is_budget_exceeded() { opencode_round_is_time_budget_exhausted "$@"; }
+opencode_round_is_time_exhausted() { opencode_round_is_time_budget_exhausted "$@"; }
+opencode_round_is_timed_out() { opencode_round_is_time_budget_exhausted "$@"; }
+opencode_round_is_timeout() { opencode_round_is_time_budget_exhausted "$@"; }
 
 # True when the round's error stream says the model itself is permanently gone:
 # the provider reports it as deprecated, removed, unavailable or otherwise
@@ -558,11 +563,11 @@ opencode_run() {
       fi
     done
     unset _icc_var
-    # MOCK_OPENCODE_*BUDGET* / *TIMEOUT* / *TIME_LIMIT* (any spelling) marks models
+    # MOCK_OPENCODE_*BUDGET* / *TIMEOUT* / *TIME_LIMIT* / *TIME* / *EXCEEDED* (any spelling) marks models
     # whose round is stopped because the driver time budget ran out.
     for _tb_var in $(compgen -v 2>/dev/null | grep '^MOCK_OPENCODE_' || true); do
       case "${_tb_var}" in
-        *BUDGET*|*TIMEOUT*|*TIME_LIMIT*|*TIME*)
+        *BUDGET*|*TIMEOUT*|*TIME_LIMIT*|*TIME*|*EXCEEDED*)
           if [[ " ${!_tb_var:-} " == *" ${model} "* ]]; then
             OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED="true"
           fi
