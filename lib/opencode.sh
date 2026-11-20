@@ -364,15 +364,6 @@ opencode_round_is_time_budget_exhausted() {
   return 1
 }
 
-# Aliases: different wordings the driver / tests may use for the same condition.
-opencode_round_is_time_budget_exceeded() { opencode_round_is_time_budget_exhausted "$@"; }
-opencode_round_is_budget_exhausted() { opencode_round_is_time_budget_exhausted "$@"; }
-opencode_round_is_time_budget() { opencode_round_is_time_budget_exhausted "$@"; }
-opencode_round_is_budget_exceeded() { opencode_round_is_time_budget_exhausted "$@"; }
-opencode_round_is_time_exhausted() { opencode_round_is_time_budget_exhausted "$@"; }
-opencode_round_is_timed_out() { opencode_round_is_time_budget_exhausted "$@"; }
-opencode_round_is_timeout() { opencode_round_is_time_budget_exhausted "$@"; }
-
 # True when the round's error stream says the model itself is permanently gone:
 # the provider reports it as deprecated, removed, unavailable or otherwise
 # unknown. These are exactly the model-level lines opencode_round_is_environment
