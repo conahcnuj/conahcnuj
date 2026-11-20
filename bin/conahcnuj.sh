@@ -1380,6 +1380,10 @@ implement() {
           echo "Model ${model} hit a rate limit; trying the next model without waiting for the retry." >&2
         elif [[ "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" ]]; then
           echo "Model ${model} failed before completing the work: cancelled a request for input this run cannot answer; handing off to the next model." >&2
+        elif [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+          echo "Model ${model} failed before completing the work: opencode exceeded the remaining driver time budget." >&2
+          echo "ERROR: time budget (${MAX_DURATION}s) exhausted while waiting. Exiting." >&2
+          exit 1
         else
           echo "Model ${model} failed before completing the work; handing off to the next model." >&2
         fi
