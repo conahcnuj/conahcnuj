@@ -1567,11 +1567,27 @@ poll_conditions() {
         # already an ancestor of HEAD locally, there is no conflict to fix:
         # poll and wait for GitHub to catch up instead.
         if [[ -n "${base}" ]] && git remote get-url origin >/dev/null 2>&1; then
+          # Recheck against the remote PR head, not a possibly stale local
+          # HEAD: a local HEAD ahead of (or behind) the branch GitHub evaluates
+          # made the driver wait for mergeability that would never arrive (#997).
+          if [[ -n "${branch:-}" ]]; then
+            git fetch origin "${branch}" >/dev/null 2>&1 || true
+            if git rev-parse --verify "origin/${branch}" >/dev/null 2>&1; then
+              git reset --hard "origin/${branch}" >/dev/null 2>&1 || true
+            fi
+          fi
           git fetch origin "${base}" >/dev/null 2>&1 || true
           if git rev-parse --verify "origin/${base}" >/dev/null 2>&1 && git merge-base --is-ancestor "origin/${base}" HEAD 2>/dev/null; then
-            echo "PR #${pr}: base branch '${base}' already merged locally; waiting for GitHub to recompute mergeability." >&2
-            rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
-            continue
+            if [[ "${base_merge_waited:-false}" == "false" ]]; then
+              echo "PR #${pr}: base branch '${base}' already merged locally; waiting for GitHub to recompute mergeability." >&2
+              rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
+              base_merge_waited="true"
+              continue
+            fi
+            # One passive wait did not make GitHub recompute; stop waiting and
+            # fall through to the active update-branch nudge below instead of
+            # looping on the stale cache (#997).
+            echo "PR #${pr}: base branch '${base}' still reported conflicting after a wait; asking GitHub to update the branch." >&2
           fi
           # Phantom conflict: GitHub reports CONFLICTING/DIRTY but the base
           # merges cleanly into the branch locally (usually a rename-detection
@@ -1591,6 +1607,7 @@ poll_conditions() {
                 git fetch origin "${_br}" >/dev/null 2>&1 || true
                 git reset --hard "origin/${_br}" >/dev/null 2>&1 || true
               fi
+              base_merge_waited="false"
               rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
               continue
             fi
@@ -1777,6 +1794,11 @@ drive() {
   local owner="${1}" repo="${2}" pr="${3}" branch="${4}" base="${5}" title="${6}" body="${7}" closes="${8}" initial_draft="${9:-false}"
   local last_sig=""
   local conflict_fix_pushed="false"
+  # Whether we have already done one passive wait for GitHub to recompute
+  # mergeability after seeing the base already merged locally. After one wait
+  # we stop waiting and actively nudge GitHub (update-branch) instead, so a
+  # stale mergeability cache cannot stall the run forever (#997).
+  local base_merge_waited="false"
   # Whether the PR is currently a draft. The driver keeps it in sync with the
   # per-issue TODO.jsonl: a draft while the file has an unfinished task line,
   # marked ready once it has no line (see the TODO.jsonl gate below). A resumed
@@ -2147,6 +2169,7 @@ ${summary}"
     fi
 
     conflict_fix_pushed="false"
+    base_merge_waited="false"
     echo "PR #${pr}: non-reviewer constraints satisfied." >&2
     # If a feedback round's reply was deferred (its first poll failed on a
     # conflict or a CI failure), post it now that the branch is green and
