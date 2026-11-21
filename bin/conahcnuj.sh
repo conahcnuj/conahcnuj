@@ -1801,6 +1801,11 @@ drive() {
   local owner="${1}" repo="${2}" pr="${3}" branch="${4}" base="${5}" title="${6}" body="${7}" closes="${8}" initial_draft="${9:-false}"
   local last_sig=""
   local conflict_fix_pushed="false"
+  # How many consecutive waits we have spent in the conflict_fix_pushed
+  # branch without GitHub recomputing mergeability. Bounds the wait so a
+  # genuinely stuck PR eventually falls through to a real re-implementation
+  # round instead of looping on an empty tape forever (issue #1004).
+  local conflict_fix_wait_count="0"
   # Whether we have already done one passive wait for GitHub to recompute
   # mergeability after seeing the base already merged locally. After one wait
   # we stop waiting and actively nudge GitHub (update-branch) instead, so a
@@ -2143,16 +2148,32 @@ ${summary}"
       if [[ "${CONSTRAINT_FAILURE}" == "conflict" && "${conflict_fix_pushed}" == "true" ]]; then
         echo "PR #${pr}: conflict fix already pushed; waiting for GitHub to recompute mergeability." >&2
         rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
-        # One wait is enough to let GitHub recompute; if it still reports a
-        # conflict afterwards the fix did not take, so drop the flag and let
-        # the next iteration try again instead of waiting forever (#932).
-        conflict_fix_pushed="false"
-        continue
+        # GitHub recomputes mergeability asynchronously and may take more than
+        # one poll to notice that the conflict has already been resolved: the
+        # resolved tree was pushed as a verified commit, but its mergeability
+        # cache lags behind the push. Keep waiting (and keep the flag set) so
+        # the next poll gets another chance, instead of dropping the flag after
+        # a single wait and re-running an implementation round that finds
+        # nothing to do and only re-pushes (which resets GitHub's computation
+        # again) -- that loop is what exhausted the time budget in #1004. The
+        # time budget at the top of the loop is the bound; a genuinely
+        # unresolved conflict still fails the run, it just stops burning model
+        # rounds while GitHub catches up.
+        conflict_fix_wait_count=$((conflict_fix_wait_count + 1))
+        if [[ "${conflict_fix_wait_count}" -ge 100 ]]; then
+          echo "PR #${pr}: GitHub still reports a conflict after ${conflict_fix_wait_count} waits; treating the fix as not taken and re-implementing." >&2
+          conflict_fix_pushed="false"
+          conflict_fix_wait_count="0"
+          # fall through to the re-implementation path below
+        else
+          continue
+        fi
       fi
       local produced_change="false" fix_context
       if [[ "${CONSTRAINT_FAILURE}" == "conflict" ]]; then
         refresh_base_branch "${base}"
         conflict_fix_pushed="false"
+        conflict_fix_wait_count="0"
       fi
       fix_context="$(constraint_fix_context "${branch}" "${base}")"
       echo "PR #${pr}: constraints failing (${CONSTRAINT_FAILURE:-unknown}); fixing with a new implementation round." >&2
@@ -2176,6 +2197,7 @@ ${summary}"
     fi
 
     conflict_fix_pushed="false"
+    conflict_fix_wait_count="0"
     base_merge_waited="false"
     echo "PR #${pr}: non-reviewer constraints satisfied." >&2
     # If a feedback round's reply was deferred (its first poll failed on a
