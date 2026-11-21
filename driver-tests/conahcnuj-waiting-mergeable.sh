@@ -92,4 +92,3 @@ WAIT_COUNT="$(grep -c "already merged locally; waiting for GitHub to recompute m
 grep -q "All non-reviewer constraints pass." "${LOG}" || { echo "FAIL: constraints never passed"; exit 1; }
 grep -q "Review requested on PR #15 (reviewer: conahcnuj)" "${LOG}" || { echo "FAIL: the PR was not handed to the owner"; exit 1; }
 
-echo "conahcnuj waiting-mergeable passed"
