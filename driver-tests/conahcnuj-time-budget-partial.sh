@@ -69,5 +69,3 @@ grep -q "Using coding agent's commit message: partial commit from agent" "${LOG}
 grep -q "Bug report issue #25 created" "${LOG}" || { echo "FAIL: no bug report"; cat "${LOG}"; exit 1; }
 # The committed message must be on the branch.
 git -C "${WORK}" log --format=%s | grep -q "partial commit from agent" || { echo "FAIL: partial commit missing from branch"; git -C "${WORK}" log --oneline; exit 1; }
-
-echo "conahcnuj time-budget partial commit flow passed"

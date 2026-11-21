@@ -1376,7 +1376,6 @@ implement() {
       if [[ "${_model_real_change}" == "false" && "${wrote_message}" == "false" && "${run_failed}" == "false" ]] && branch_has_commits "" "${base_branch}"; then
         rm -f "${workdir}/.commit-msg"
         echo "Model ${model} found the branch already implemented and made no changes; the round is complete." >&2
-        echo "Model ${model} wrote .commit-msg and left the tree as it was; the branch already carries the implementation, so the round is complete." >&2
         OPENCODE_LAST_MODEL="${model}"
         return 0
       fi
