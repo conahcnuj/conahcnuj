@@ -1350,12 +1350,12 @@ implement() {
         OPENCODE_LAST_MODEL="${model}"
         return 0
       fi
-      if [[ "${tree_changed}" == "true" && "${wrote_message}" == "true" ]]; then
+      if [[ "${run_failed}" == "false" && "${tree_changed}" == "true" && "${wrote_message}" == "true" ]]; then
         echo "Model ${model} completed the work." >&2
         OPENCODE_LAST_MODEL="${model}"
         return 0
       fi
-      if [[ "${wrote_message}" == "true" ]] && branch_has_commits "" "${base_branch}"; then
+      if [[ "${run_failed}" == "false" && "${wrote_message}" == "true" ]] && branch_has_commits "" "${base_branch}"; then
         rm -f "${workdir}/.commit-msg"
         echo "Model ${model} wrote .commit-msg and left the tree as it was; the branch already carries the implementation, so the round is complete." >&2
         OPENCODE_LAST_MODEL="${model}"
@@ -1376,11 +1376,16 @@ implement() {
       if [[ "${_model_real_change}" == "false" && "${wrote_message}" == "false" && "${run_failed}" == "false" ]] && branch_has_commits "" "${base_branch}"; then
         rm -f "${workdir}/.commit-msg"
         echo "Model ${model} found the branch already implemented and made no changes; the round is complete." >&2
-        echo "Model ${model} wrote .commit-msg and left the tree as it was; the branch already carries the implementation, so the round is complete." >&2
         OPENCODE_LAST_MODEL="${model}"
         return 0
       fi
-      rm -f "${workdir}/.commit-msg"
+      # Preserve .commit-msg on a time-budget exhaustion so the caller can
+      # commit whatever partial work the round managed to produce before the
+      # budget ran out. Removing it here (as for any other failed round) would
+      # discard the agent's commit message and strand the partial change.
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" != "true" ]]; then
+        rm -f "${workdir}/.commit-msg"
+      fi
       previous_model="${model}"
       if [[ "${run_failed}" == "true" ]]; then
         failed_rounds=$((failed_rounds + 1))
@@ -1402,7 +1407,9 @@ implement() {
         elif [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
           echo "Model ${model} failed before completing the work: opencode exceeded the remaining driver time budget." >&2
           echo "ERROR: time budget (${MAX_DURATION}s) exhausted while waiting. Exiting." >&2
-          exit 1
+          # Let the caller commit any .commit-msg the round managed to write
+          # before giving up, instead of discarding it with an immediate exit.
+          return 1
         else
           echo "Model ${model} failed before completing the work; handing off to the next model." >&2
         fi
@@ -2263,6 +2270,9 @@ start_issue() {
     echo "PR could not be created for ${branch} -> ${default_branch}; running an implementation round." >&2
     if ! implement "${title}" "${body}" "The pull request for ${branch} could not be opened; GitHub rejects a PR with no changes between the branches. Make a real change so the PR can be created." "${default_branch}"; then
       echo "ERROR: could not implement issue #${num} with any available model." >&2
+      if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
+        commit_changes
+      fi
       exit 1
     fi
     rm -f .branch-name
@@ -2289,6 +2299,9 @@ start_issue() {
   else
     if ! implement "${title}" "${body}" "" "${default_branch}"; then
       echo "ERROR: could not implement issue #${num} with any available model." >&2
+      if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
+        commit_changes
+      fi
       exit 1
     fi
     # The PR is already open on the driver-derived branch, so keep that branch
