@@ -1350,12 +1350,12 @@ implement() {
         OPENCODE_LAST_MODEL="${model}"
         return 0
       fi
-      if [[ "${tree_changed}" == "true" && "${wrote_message}" == "true" ]]; then
+      if [[ "${run_failed}" == "false" && "${tree_changed}" == "true" && "${wrote_message}" == "true" ]]; then
         echo "Model ${model} completed the work." >&2
         OPENCODE_LAST_MODEL="${model}"
         return 0
       fi
-      if [[ "${wrote_message}" == "true" ]] && branch_has_commits "" "${base_branch}"; then
+      if [[ "${run_failed}" == "false" && "${wrote_message}" == "true" ]] && branch_has_commits "" "${base_branch}"; then
         rm -f "${workdir}/.commit-msg"
         echo "Model ${model} wrote .commit-msg and left the tree as it was; the branch already carries the implementation, so the round is complete." >&2
         OPENCODE_LAST_MODEL="${model}"
@@ -1380,7 +1380,13 @@ implement() {
         OPENCODE_LAST_MODEL="${model}"
         return 0
       fi
-      rm -f "${workdir}/.commit-msg"
+      # Preserve .commit-msg on a time-budget exhaustion so the caller can
+      # commit whatever partial work the round managed to produce before the
+      # budget ran out. Removing it here (as for any other failed round) would
+      # discard the agent's commit message and strand the partial change.
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" != "true" ]]; then
+        rm -f "${workdir}/.commit-msg"
+      fi
       previous_model="${model}"
       if [[ "${run_failed}" == "true" ]]; then
         failed_rounds=$((failed_rounds + 1))
