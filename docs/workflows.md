@@ -77,6 +77,7 @@ CI では行いません。
 | `number` | ○ | - | 駆動する issue / PR 番号 |
 | `repository` | - | 呼び出し側 | `owner/name` 形式の対象リポジトリ |
 | `environment` | - | `conahcnuj` | App の secrets を持つ environment 名 |
+| `container_image` | - | (empty) | attempt ジョブを実行するコンテナイメージ（DevContainer 派生イメージ等）。空の場合はホストで実行 |
 
 secret（`APP_ID` / `INSTALLATION_ID` / `PRIVATE_KEY`）は必須。同一
 organization / enterprise 内なら `secrets: inherit`、それ以外は名前付きで渡す。
