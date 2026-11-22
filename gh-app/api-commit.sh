@@ -388,12 +388,10 @@ if [[ -f "$(git rev-parse --git-path MERGE_HEAD 2>/dev/null)" ]]; then
   git merge --quit
 fi
 git fetch origin "${BRANCH}" >/dev/null 2>&1 || true
-# Prefer a fast-forward that leaves any uncommitted work in the tree (a hard
-# reset would discard it, stranding a partially edited file the agent has not
-# yet staged). Fall back to a hard reset only when a fast-forward is not
-# possible, e.g. when the local branch has diverged.
-if ! git merge --ff-only "origin/${BRANCH}" >/dev/null 2>&1; then
-  git reset --hard "origin/${BRANCH}" >/dev/null 2>&1 || true
-fi
+# Fast-forward only: this leaves any uncommitted work in the tree intact (a
+# hard reset would discard it, stranding a partially edited file the agent has
+# not yet staged). Divergence is left untouched rather than being papered over
+# with a destructive reset.
+git merge --ff-only "origin/${BRANCH}" >/dev/null 2>&1 || true
 
 printf '%s' "${COMMIT_SHA}"

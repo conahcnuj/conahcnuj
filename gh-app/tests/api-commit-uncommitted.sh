@@ -30,7 +30,7 @@ chmod +x "${PRIV}/gh-app/get-token.sh"
 cat > "${PRIV}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 args="$*"
-if [[ "$args" == *"/graphql"* ]]; then
+if [[ "${args}" == *"/graphql"* ]]; then
   printf '{"data":{"createCommitOnBranch":{"commit":{"oid":"%s"}}}}' "${FAKE_NEW_SHA}"
 else
   printf '{"object":{"sha":"%s"}}' "${FAKE_HEAD_SHA}"
@@ -92,4 +92,3 @@ git -C "${W}" diff --quiet -- f.txt 2>/dev/null || true
 # h.txt should still be present in the index as a staged addition.
 git -C "${W}" ls-files --error-unmatch h.txt >/dev/null 2>&1 || { echo "FAIL: staged file h.txt disappeared from the index"; exit 1; }
 
-echo "PASS api-commit.sh preserves uncommitted work across sync"
