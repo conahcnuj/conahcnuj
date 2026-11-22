@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-REPO="/home/runner/work/conahcnuj/conahcnuj"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "${HERE}/.." && pwd)"
 DRIVER="${REPO}/bin/conahcnuj.sh"
 
 ROOT="$(mktemp -d)"
