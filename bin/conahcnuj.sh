@@ -1825,28 +1825,6 @@ drive() {
   local reply_pending="false"
 
   while true; do
-    # The budget expired. Once the PR is with the reviewer, that is simply a
-    # human who has not answered yet, so end cleanly (the pull_request_review
-    # trigger starts the next run and the merge workflow chains off the
-    # approval); before the hand-off it is a real failure worth a bug report.
-    if time_budget_exhausted; then
-      if [[ "${handed_off}" == "true" ]]; then
-        echo "PR #${pr}: the time budget is exhausted while waiting for the reviewer's decision; the PR is complete and waits for a human." >&2
-        exit 0
-      fi
-      # A conflict fix has been pushed and GitHub has not yet recomputed
-      # mergeability for it: the branch is with GitHub, not with us, and there
-      # is nothing more the driver can do this run. Treat that like the
-      # reviewer-wait case above (human/GitHub catches up on its own) instead
-      # of filing a bug report for a state we cannot resolve locally (#1009).
-      if [[ "${conflict_fix_pushed:-false}" == "true" ]]; then
-        echo "PR #${pr}: the time budget is exhausted while waiting for GitHub to recompute mergeability; the conflict fix is pushed and waits for GitHub." >&2
-        exit 0
-      fi
-      echo "ERROR: time budget (${MAX_DURATION}s) exhausted while waiting. Exiting." >&2
-      exit 1
-    fi
-
     # Commit leftovers from a previously interrupted run. Only possible while
     # the interrupted run's agent had already written its .commit-msg: the
     # driver never invents a commit message, so a dirty tree without one (e.g.
@@ -1869,6 +1847,28 @@ drive() {
       # After committing our own fix, wait for CI to re-run instead of
       # immediately trying to implement (which would fail if nothing changed).
       continue
+    fi
+
+    # The budget expired. Once the PR is with the reviewer, that is simply a
+    # human who has not answered yet, so end cleanly (the pull_request_review
+    # trigger starts the next run and the merge workflow chains off the
+    # approval); before the hand-off it is a real failure worth a bug report.
+    if time_budget_exhausted; then
+      if [[ "${handed_off}" == "true" ]]; then
+        echo "PR #${pr}: the time budget is exhausted while waiting for the reviewer's decision; the PR is complete and waits for a human." >&2
+        exit 0
+      fi
+      # A conflict fix has been pushed and GitHub has not yet recomputed
+      # mergeability for it: the branch is with GitHub, not with us, and there
+      # is nothing more the driver can do this run. Treat that like the
+      # reviewer-wait case above (human/GitHub catches up on its own) instead
+      # of filing a bug report for a state we cannot resolve locally (#1009).
+      if [[ "${conflict_fix_pushed:-false}" == "true" ]]; then
+        echo "PR #${pr}: the time budget is exhausted while waiting for GitHub to recompute mergeability; the conflict fix is pushed and waits for GitHub." >&2
+        exit 0
+      fi
+      echo "ERROR: time budget (${MAX_DURATION}s) exhausted while waiting. Exiting." >&2
+      exit 1
     fi
 
     # The PR is a draft exactly while the per-issue TODO.jsonl has a task line:
@@ -1897,6 +1897,9 @@ drive() {
       if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
         commit_changes
         produced_change="true"
+      fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
       fi
       if [[ "${produced_change}" != "true" ]]; then
         echo "No changes could be produced to open the PR; backing off before retrying." >&2
@@ -1935,6 +1938,9 @@ drive() {
       if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
         commit_changes
         todo_change="true"
+      fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
       fi
       if [[ "${todo_change}" != "true" ]]; then
         echo "No model produced a change to finish the issue; backing off before retrying." >&2
@@ -2081,6 +2087,9 @@ ${summary}"
         commit_changes
         feedback_produced_change="true"
       fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
+      fi
       rm -f .commit-msg
       # Verify the non-reviewer constraints again before handing the PR back:
       # the fix restarted CI, so the reviewer is only asked once the checks are
@@ -2109,6 +2118,12 @@ ${summary}"
 ${summary}"
       if ! implement "${title}" "${body}" "" "${base}" "${reply_prompt}"; then
         echo "No thread reply was posted for this feedback; continuing." >&2
+      fi
+      if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
+        commit_changes
+      fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
       fi
       rm -f .commit-msg
       reply_pending="false"
@@ -2209,6 +2224,9 @@ ${summary}"
         commit_changes
         produced_change="true"
       fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
+      fi
       if [[ "${produced_change}" == "true" && "${CONSTRAINT_FAILURE}" == "conflict" ]]; then
         conflict_fix_pushed="true"
       fi
@@ -2233,6 +2251,12 @@ ${summary}"
 ${summary}"
       if ! implement "${title}" "${body}" "" "${base}" "${reply_prompt}"; then
         echo "No thread reply was posted for this feedback; continuing." >&2
+      fi
+      if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
+        commit_changes
+      fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
       fi
       rm -f .commit-msg
       reply_pending="false"
