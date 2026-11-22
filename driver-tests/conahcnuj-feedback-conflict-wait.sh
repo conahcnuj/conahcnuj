@@ -71,9 +71,6 @@ RC=0
   CONAHCNUJ_MAX_SECONDS=120 env -u GITHUB_ACTIONS bash "${DRIVER}" 15 < "${TAPE}"
 ) > "${LOG}" 2>&1 || RC=$?
 
-echo "RC=$RC"
-echo "waits=$(grep -c 'conflict fix already pushed; waiting' "${LOG}")"
-echo "reimpl=$(grep -c 'fixing with a new implementation round' "${LOG}")"
 if [[ ${RC} -ne 0 ]]; then cat "${LOG}"; fi
 
 [[ ${RC} -eq 0 ]] || { echo "FAIL: driver exited ${RC} (expected 0)"; exit 1; }
@@ -87,5 +84,3 @@ IMPL_COUNT="$(grep -c "fixing with a new implementation round" "${LOG}" || true)
 grep -q "New review feedback detected" "${LOG}" || { echo "FAIL: review feedback was not acted on"; exit 1; }
 grep -q "Review requested on PR #15" "${LOG}" || { echo "FAIL: the PR was not handed to the owner"; exit 1; }
 grep -q "Ready to merge" "${LOG}" || { echo "FAIL: no ready-to-merge line"; exit 1; }
-
-echo "conahcnuj feedback-conflict-wait passed"
