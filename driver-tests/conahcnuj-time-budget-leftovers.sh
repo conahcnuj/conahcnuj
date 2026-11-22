@@ -52,5 +52,3 @@ RC=0
 grep -q "Using coding agent's commit message: leftover commit from interrupted run" "${LOG}" || { echo "FAIL: leftover was not committed"; cat "${LOG}"; exit 1; }
 grep -q "ERROR: time budget (0s) exhausted while waiting" "${LOG}" || { echo "FAIL: exhausted message missing"; cat "${LOG}"; exit 1; }
 git -C "${WORK}" log --format=%s | grep -q "leftover commit from interrupted run" || { echo "FAIL: leftover commit missing from branch"; git -C "${WORK}" log --oneline; exit 1; }
-
-echo "conahcnuj time-budget-leftovers flow passed"

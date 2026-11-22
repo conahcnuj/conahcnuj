@@ -54,5 +54,3 @@ RC=0
 grep -q "opencode exceeded the remaining driver time budget" "${LOG}" || { echo "FAIL: time-budget round not reported"; cat "${LOG}"; exit 1; }
 grep -q "ERROR: time budget (120s) exhausted while waiting" "${LOG}" || { echo "FAIL: exhausted message missing"; cat "${LOG}"; exit 1; }
 ! grep -q "filing a bug report" "${LOG}" || true
-
-echo "conahcnuj time-budget-feedback flow passed"
