@@ -1919,7 +1919,7 @@ drive() {
     # normal hand-off runs. This makes "the issue is done" a property of the
     # work tree, not a claim in a chat message, so an unfinished issue cannot be
     # presented as ready.
-    if [[ "${want_draft}" == "true" ]]; then
+    if [[ "${want_draft}" == "true" && "${conflict_fix_pushed:-false}" != "true" ]]; then
       if [[ "${pr_draft}" != "true" ]]; then
         echo "PR #${pr} is not a draft while TODO.jsonl has unfinished tasks; converting it back to a draft." >&2
         gh_api_convert_pr_to_draft "${owner}" "${repo}" "${pr}" || echo "WARNING: could not convert PR #${pr} to a draft; continuing without requesting review." >&2
@@ -2065,7 +2065,10 @@ drive() {
       local code_help="Address the pull request review feedback. Make the code changes, run the repository's own validation, commit them with \`git vc\`, and resolve any merge conflict (merge the base branch in, resolve every conflict, leave no conflict markers). Do not reply in the review threads yet: the driver verifies the checks after your push and asks you to reply once they pass, so a reply never precedes an unpushed or conflicting change. Do not request review yourself (the driver does that after the checks pass).
 
 ${summary}"
-      if ! implement "${title}" "${body}" "${code_help}" "${base}"; then
+      local feedback_produced_change="false"
+      if implement "${title}" "${body}" "${code_help}" "${base}"; then
+        feedback_produced_change="true"
+      else
         echo "No working-tree change was produced for this feedback; keeping whatever thread replies were already made." >&2
       fi
       # The agent is asked to commit with `git vc` itself; the driver only
@@ -2076,6 +2079,7 @@ ${summary}"
       # run.
       if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
         commit_changes
+        feedback_produced_change="true"
       fi
       rm -f .commit-msg
       # Verify the non-reviewer constraints again before handing the PR back:
@@ -2084,9 +2088,19 @@ ${summary}"
       # hand-off. Conflicts make CI status unreliable, so the reply (the
       # comment) is deferred until this passes.
       if ! poll_conditions "${owner}" "${repo}" "${pr}" "${base}"; then
+        # A conflict fix may have just been pushed while GitHub has not yet
+        # recomputed mergeability for it. Track that so the loop waits instead
+        # of re-running an implementation round (and re-pushing, which resets
+        # GitHub's computation again) -- the failure mode of issue #1009.
+        if [[ "${CONSTRAINT_FAILURE}" == "conflict" && "${feedback_produced_change}" == "true" ]]; then
+          conflict_fix_pushed="true"
+          conflict_fix_wait_count="0"
+        fi
         echo "Constraints failing after addressing feedback; fixing next cycle." >&2
         continue
       fi
+      conflict_fix_pushed="false"
+      conflict_fix_wait_count="0"
       # Checks pass and the branch merges: now it is safe to reply in the
       # review threads (push -> CI -> comment -> request review). The reply
       # round uses a prompt override so the thread ids reach the model.
