@@ -1834,6 +1834,15 @@ drive() {
         echo "PR #${pr}: the time budget is exhausted while waiting for the reviewer's decision; the PR is complete and waits for a human." >&2
         exit 0
       fi
+      # A conflict fix has been pushed and GitHub has not yet recomputed
+      # mergeability for it: the branch is with GitHub, not with us, and there
+      # is nothing more the driver can do this run. Treat that like the
+      # reviewer-wait case above (human/GitHub catches up on its own) instead
+      # of filing a bug report for a state we cannot resolve locally (#1009).
+      if [[ "${conflict_fix_pushed:-false}" == "true" ]]; then
+        echo "PR #${pr}: the time budget is exhausted while waiting for GitHub to recompute mergeability; the conflict fix is pushed and waits for GitHub." >&2
+        exit 0
+      fi
       echo "ERROR: time budget (${MAX_DURATION}s) exhausted while waiting. Exiting." >&2
       exit 1
     fi
