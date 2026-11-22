@@ -1898,13 +1898,10 @@ drive() {
         commit_changes
         produced_change="true"
       fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
+      fi
       if [[ "${produced_change}" != "true" ]]; then
-        if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
-          if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
-            commit_changes
-          fi
-          exit 1
-        fi
         echo "No changes could be produced to open the PR; backing off before retrying." >&2
         rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
       fi
@@ -1942,13 +1939,10 @@ drive() {
         commit_changes
         todo_change="true"
       fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
+      fi
       if [[ "${todo_change}" != "true" ]]; then
-        if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
-          if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
-            commit_changes
-          fi
-          exit 1
-        fi
         echo "No model produced a change to finish the issue; backing off before retrying." >&2
         rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
       fi
@@ -2125,6 +2119,12 @@ ${summary}"
       if ! implement "${title}" "${body}" "" "${base}" "${reply_prompt}"; then
         echo "No thread reply was posted for this feedback; continuing." >&2
       fi
+      if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
+        commit_changes
+      fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
+      fi
       rm -f .commit-msg
       reply_pending="false"
       # The findings were addressed this round (checks passed and the thread
@@ -2224,16 +2224,13 @@ ${summary}"
         commit_changes
         produced_change="true"
       fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
+      fi
       if [[ "${produced_change}" == "true" && "${CONSTRAINT_FAILURE}" == "conflict" ]]; then
         conflict_fix_pushed="true"
       fi
       if [[ "${produced_change}" != "true" ]]; then
-        if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
-          if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
-            commit_changes
-          fi
-          exit 1
-        fi
         echo "No model completed work for the failing constraints; backing off before re-checking." >&2
         rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
       fi
@@ -2254,6 +2251,12 @@ ${summary}"
 ${summary}"
       if ! implement "${title}" "${body}" "" "${base}" "${reply_prompt}"; then
         echo "No thread reply was posted for this feedback; continuing." >&2
+      fi
+      if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
+        commit_changes
+      fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
       fi
       rm -f .commit-msg
       reply_pending="false"
