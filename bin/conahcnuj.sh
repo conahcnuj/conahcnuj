@@ -1899,6 +1899,12 @@ drive() {
         produced_change="true"
       fi
       if [[ "${produced_change}" != "true" ]]; then
+        if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+          if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
+            commit_changes
+          fi
+          exit 1
+        fi
         echo "No changes could be produced to open the PR; backing off before retrying." >&2
         rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
       fi
@@ -1937,6 +1943,12 @@ drive() {
         todo_change="true"
       fi
       if [[ "${todo_change}" != "true" ]]; then
+        if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+          if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
+            commit_changes
+          fi
+          exit 1
+        fi
         echo "No model produced a change to finish the issue; backing off before retrying." >&2
         rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
       fi
@@ -2081,6 +2093,9 @@ ${summary}"
         commit_changes
         feedback_produced_change="true"
       fi
+      if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+        exit 1
+      fi
       rm -f .commit-msg
       # Verify the non-reviewer constraints again before handing the PR back:
       # the fix restarted CI, so the reviewer is only asked once the checks are
@@ -2213,6 +2228,12 @@ ${summary}"
         conflict_fix_pushed="true"
       fi
       if [[ "${produced_change}" != "true" ]]; then
+        if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
+          if workdir_changed "$(pwd)" && [[ -f ".commit-msg" ]]; then
+            commit_changes
+          fi
+          exit 1
+        fi
         echo "No model completed work for the failing constraints; backing off before re-checking." >&2
         rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
       fi
