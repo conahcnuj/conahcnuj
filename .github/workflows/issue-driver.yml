@@ -36,6 +36,11 @@ on:
         required: false
         type: string
         default: ""
+      container_image:
+        description: 'Container image to run the attempt job in (e.g. a DevContainer-derived image with preinstalled tooling). Empty (default) runs on the host.'
+        required: false
+        type: string
+        default: ""
     secrets:
       APP_ID:
         required: true
@@ -55,6 +60,8 @@ jobs:
   attempt:
     name: Attempt to resolve issue
     runs-on: ubuntu-latest
+    container:  # ${{ inputs.container_image }}
+      image: ${{ inputs.container_image }}
     environment: ${{ inputs.environment || 'conahcnuj' }}
     if: >-
       inputs.number ||
