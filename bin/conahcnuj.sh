@@ -2005,7 +2005,7 @@ drive() {
       has_new_feedback="true"
     fi
 
-    if [[ "${pr_draft}" == "true" && "${has_new_feedback}" != "true" ]]; then
+    if [[ "${pr_draft}" == "true" && "${has_new_feedback}" != "true" && "${conflict_fix_pushed:-false}" != "true" ]]; then
       echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
       gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
       pr_draft="false"
@@ -2205,17 +2205,11 @@ ${summary}"
         # nothing to do and only re-pushes (which resets GitHub's computation
         # again) -- that loop is what exhausted the time budget in #1004. The
         # time budget at the top of the loop is the bound; a genuinely
-        # unresolved conflict still fails the run, it just stops burning model
-        # rounds while GitHub catches up.
+        # unresolved conflict still waits for GitHub here instead of being
+        # re-implemented, which would only reset the CONFLICTING/DIRTY state
+        # that GitHub is still computing (#1045).
         conflict_fix_wait_count=$((conflict_fix_wait_count + 1))
-        if [[ "${conflict_fix_wait_count}" -ge 100 ]]; then
-          echo "PR #${pr}: GitHub still reports a conflict after ${conflict_fix_wait_count} waits; treating the fix as not taken and re-implementing." >&2
-          conflict_fix_pushed="false"
-          conflict_fix_wait_count="0"
-          # fall through to the re-implementation path below
-        else
-          continue
-        fi
+        continue
       fi
       local produced_change="false" fix_context
       if [[ "${CONSTRAINT_FAILURE}" == "conflict" ]]; then
