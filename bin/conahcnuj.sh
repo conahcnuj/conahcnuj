@@ -46,7 +46,7 @@
 #   CONAHCNUJ_BRANCH_FETCH_RETRY_PAUSE  pause between the retries of a
 #                            just-created branch's fetch (default: 2 s; 0
 #                            disables the pause)
-#   CONAHCNUJ_POLL_CONDITIONS_MIN/MAX  rate-limited poll window (default 15/300 s)
+#   CONAHCNUJ_POLL_CONDITIONS_MIN/MAX  rate-limited poll window (default 15/60 s)
 #   CONAHCNUJ_TEST_MODE=1    offline driver test (mock API tape + mock opencode)
 #   CONAHCNUJ_COMMIT_MODEL   Co-Authored-By trailer value; when unset, the
 #                            driver uses the plugin label (provider
@@ -85,7 +85,7 @@ case "${CONAHCNUJ_CI:-}" in true|1) CI_MODE="true" ;; esac
 
 MAX_DURATION="${CONAHCNUJ_MAX_SECONDS:-259200}"
 POLL_CONDITIONS_MIN="${CONAHCNUJ_POLL_CONDITIONS_MIN:-15}"
-POLL_CONDITIONS_MAX="${CONAHCNUJ_POLL_CONDITIONS_MAX:-300}"
+POLL_CONDITIONS_MAX="${CONAHCNUJ_POLL_CONDITIONS_MAX:-60}"
 START_TIME="$(date +%s)"
 # Snapshot a caller-supplied trailer value. apply_driver_commit_model exports
 # CONAHCNUJ_COMMIT_MODEL for api-commit.sh, so a later commit must not treat
