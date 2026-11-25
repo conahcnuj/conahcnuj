@@ -1811,11 +1811,14 @@ drive() {
   local owner="${1}" repo="${2}" pr="${3}" branch="${4}" base="${5}" title="${6}" body="${7}" closes="${8}" initial_draft="${9:-false}"
   local last_sig=""
   local conflict_fix_pushed="false"
-  # How many consecutive waits we have spent in the conflict_fix_pushed
-  # branch without GitHub recomputing mergeability. Bounds the wait so a
-  # genuinely stuck PR eventually falls through to a real re-implementation
-  # round instead of looping on an empty tape forever (issue #1004).
-  local conflict_fix_wait_count="0"
+  # Whether the PR's last observed state was a merge conflict (CONFLICTING or
+  # DIRTY). Tracked separately from conflict_fix_pushed so a conflict is never
+  # treated as resolved just because no fix was pushed this cycle: the PR must
+  # not be marked ready for review, nor handed to the reviewer, while it is in
+  # this state (#1045).
+  local conflict_state="false"
+  # (conflict_fix_wait_count removed: conflicts are now resolved instead of
+  # being kept in a waiting state, so there is no wait to bound, #1045.)
   # Whether we have already done one passive wait for GitHub to recompute
   # mergeability after seeing the base already merged locally. After one wait
   # we stop waiting and actively nudge GitHub (update-branch) instead, so a
@@ -1932,7 +1935,7 @@ drive() {
     # normal hand-off runs. This makes "the issue is done" a property of the
     # work tree, not a claim in a chat message, so an unfinished issue cannot be
     # presented as ready.
-    if [[ "${want_draft}" == "true" && "${conflict_fix_pushed:-false}" != "true" ]]; then
+    if [[ "${want_draft}" == "true" && "${conflict_fix_pushed:-false}" != "true" && "${conflict_state}" != "true" ]]; then
       if [[ "${pr_draft}" != "true" ]]; then
         echo "PR #${pr} is not a draft while TODO.jsonl has unfinished tasks; converting it back to a draft." >&2
         gh_api_convert_pr_to_draft "${owner}" "${repo}" "${pr}" || echo "WARNING: could not convert PR #${pr} to a draft; continuing without requesting review." >&2
@@ -2005,7 +2008,7 @@ drive() {
       has_new_feedback="true"
     fi
 
-    if [[ "${pr_draft}" == "true" && "${has_new_feedback}" != "true" ]]; then
+    if [[ "${pr_draft}" == "true" && "${has_new_feedback}" != "true" && "${conflict_fix_pushed:-false}" != "true" && "${conflict_state}" != "true" ]]; then
       echo "TODO.jsonl is clean; marking PR #${pr} ready for review." >&2
       gh_api_ready_pr "${owner}" "${repo}" "${pr}" || echo "WARNING: could not mark PR #${pr} ready for review; continuing." >&2
       pr_draft="false"
@@ -2038,6 +2041,7 @@ drive() {
       # then the driver must keep driving rather than wait.
       handed_off="false"
       conflict_fix_pushed="false"
+      conflict_state="false"
       reply_pending="true"
       echo "New review feedback detected; addressing it." >&2
       # Track the review findings as TODO entries so the work stays a draft
@@ -2111,15 +2115,19 @@ ${summary}"
         # recomputed mergeability for it. Track that so the loop waits instead
         # of re-running an implementation round (and re-pushing, which resets
         # GitHub's computation again) -- the failure mode of issue #1009.
-        if [[ "${CONSTRAINT_FAILURE}" == "conflict" && "${feedback_produced_change}" == "true" ]]; then
-          conflict_fix_pushed="true"
-          conflict_fix_wait_count="0"
+        if [[ "${CONSTRAINT_FAILURE}" == "conflict" ]]; then
+          conflict_state="true"
+          if [[ "${feedback_produced_change}" == "true" ]]; then
+            conflict_fix_pushed="true"
+          fi
+        else
+          conflict_state="false"
         fi
         echo "Constraints failing after addressing feedback; fixing next cycle." >&2
         continue
       fi
       conflict_fix_pushed="false"
-      conflict_fix_wait_count="0"
+      conflict_state="false"
       # Checks pass and the branch merges: now it is safe to reply in the
       # review threads (push -> CI -> comment -> request review). The reply
       # round uses a prompt override so the thread ids reach the model.
@@ -2193,35 +2201,18 @@ ${summary}"
       # recomputed mergeability for it. Re-running implement in that window
       # only re-pushes (which resets GitHub's computation again) and burns
       # another full model round, so poll and wait instead (#932).
-      if [[ "${CONSTRAINT_FAILURE}" == "conflict" && "${conflict_fix_pushed}" == "true" ]]; then
-        echo "PR #${pr}: conflict fix already pushed; waiting for GitHub to recompute mergeability." >&2
-        rate_limit_poll_sleep "${POLL_CONDITIONS_MIN}" "${POLL_CONDITIONS_MAX}"
-        # GitHub recomputes mergeability asynchronously and may take more than
-        # one poll to notice that the conflict has already been resolved: the
-        # resolved tree was pushed as a verified commit, but its mergeability
-        # cache lags behind the push. Keep waiting (and keep the flag set) so
-        # the next poll gets another chance, instead of dropping the flag after
-        # a single wait and re-running an implementation round that finds
-        # nothing to do and only re-pushes (which resets GitHub's computation
-        # again) -- that loop is what exhausted the time budget in #1004. The
-        # time budget at the top of the loop is the bound; a genuinely
-        # unresolved conflict still fails the run, it just stops burning model
-        # rounds while GitHub catches up.
-        conflict_fix_wait_count=$((conflict_fix_wait_count + 1))
-        if [[ "${conflict_fix_wait_count}" -ge 100 ]]; then
-          echo "PR #${pr}: GitHub still reports a conflict after ${conflict_fix_wait_count} waits; treating the fix as not taken and re-implementing." >&2
-          conflict_fix_pushed="false"
-          conflict_fix_wait_count="0"
-          # fall through to the re-implementation path below
-        else
-          continue
-        fi
+      # A conflict is never "kept" as a waiting state: resolve it. Track that
+      # the PR is currently conflicting so it is not marked ready for review or
+      # handed to the reviewer while it stays so (#1045).
+      if [[ "${CONSTRAINT_FAILURE}" == "conflict" ]]; then
+        conflict_state="true"
+      else
+        conflict_state="false"
       fi
       local produced_change="false" fix_context
       if [[ "${CONSTRAINT_FAILURE}" == "conflict" ]]; then
         refresh_base_branch "${base}"
         conflict_fix_pushed="false"
-        conflict_fix_wait_count="0"
       fi
       fix_context="$(constraint_fix_context "${branch}" "${base}")"
       echo "PR #${pr}: constraints failing (${CONSTRAINT_FAILURE:-unknown}); fixing with a new implementation round." >&2
@@ -2248,7 +2239,7 @@ ${summary}"
     fi
 
     conflict_fix_pushed="false"
-    conflict_fix_wait_count="0"
+    conflict_state="false"
     base_merge_waited="false"
     echo "PR #${pr}: non-reviewer constraints satisfied." >&2
     # If a feedback round's reply was deferred (its first poll failed on a
