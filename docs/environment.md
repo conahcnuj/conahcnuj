@@ -34,7 +34,7 @@ conahcnuj が読む環境変数の全量です。値の意味や設定ファイ�
 | `CONAHCNUJ_MAX_SECONDS` | `259200`（72 h） | 1 実行の時間予算 |
 | `CONAHCNUJ_HANDOFF_RETRY_SECONDS` | `15` | レビュー依頼リトライ前の待機秒（`0` で禁止） |
 | `CONAHCNUJ_POLL_CONDITIONS_MIN` | `15` | 制約ポーリングの最短間隔（秒） |
-| `CONAHCNUJ_POLL_CONDITIONS_MAX` | `300` | 制約ポーリングの最長間隔（秒） |
+| `CONAHCNUJ_POLL_CONDITIONS_MAX` | `60` | 制約ポーリングの最長間隔（秒） |
 | `CONAHCNUJ_COMMIT_MODEL` | 未設定 | コミット trailer（`Co-Authored-By: <値>`。プラグインが `provider (model/effort)` を設定）。未設定なら trailer なし |
 | `CONAHCNUJ_MAX_EFFORT` | 未設定 | 非空で max effort モード（opencode に `--variant max` を渡す）。`--max-effort` フラグでも有効 |
 | `CONAHCNUJ_EFFORT` | 未設定 | `max` で max effort モードを有効にする（issue-driver の `effort` 入力から設定） |
