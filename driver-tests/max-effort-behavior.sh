@@ -52,10 +52,11 @@ trap 'rm -rf "${tmp}"' EXIT
 export CONAHCNUJ_MAX_EFFORT="1"
 unset CONAHCNUJ_EFFORT
 out="$(opencode_run "Issue" "Body" "${tmp}" "opencode/m" 2>/dev/null)"
-[[ "${out}" == *"--variant max"* ]] || { echo "FAIL: max mode did not pass --variant max"; echo "${out}" | head -1; exit 1; }
+[[ "${out}" == *"opencode/m#max"* ]] || { echo "FAIL: max mode did not pass variant via model id"; echo "${out}" | head -1; exit 1; }
 
 unset CONAHCNUJ_MAX_EFFORT CONAHCNUJ_EFFORT
 out="$(opencode_run "Issue" "Body" "${tmp}" "opencode/m" 2>/dev/null)"
 [[ "${out}" != *"--variant"* ]] || { echo "FAIL: normal mode unexpectedly passed --variant"; echo "${out}" | head -1; exit 1; }
+[[ "${out}" != *"opencode/m#max"* ]] || { echo "FAIL: normal mode unexpectedly carried #max"; echo "${out}" | head -1; exit 1; }
 
 echo "opencode_run (max effort variant) passed"
