@@ -216,9 +216,6 @@ jobs:
           # driver's own repository it runs from the workspace root.
           CONAHCNUJ_CROSS_REPO: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
           CONAHCNUJ_INPUT: ${{ inputs.number || github.event_name == 'issues' && github.event.issue.number || github.event_name == 'pull_request_review' && github.event.pull_request.number || (github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0].number) }}
-          # Just under the 60-minute job cap so the driver exits gracefully
-          # and files its bug report before Actions kills the run.
-          CONAHCNUJ_MAX_SECONDS: "3540"
           CONAHCNUJ_EFFORT: ${{ inputs.effort }}
           OPENCODE_DISABLE_AUTOUPDATE: "true"
         run: |
