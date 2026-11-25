@@ -56,16 +56,10 @@ RC=0
     bash "${DRIVER}" 15 < "${TAPE}"
 ) > "${LOG}" 2>&1 || RC=$?
 
-echo "----- a signal-killed round -----"
-cat "${LOG}"
-echo "---------------------------------"
-
 # 143 (SIGTERM) is an interruption, so the bug-report carve-out must apply.
-[[ ${RC} -eq 143 ]] || { echo "FAIL: exited ${RC} (expected 143)"; exit 1; }
-grep -q "Model sig/a failed before completing the work: opencode was terminated by a signal" "${LOG}" || { echo "FAIL: signal-killed round not reported"; exit 1; }
-grep -q "Interrupted (exit 143); not filing a bug report" "${LOG}" || { echo "FAIL: run did not stop as an interruption"; exit 1; }
-! grep -q "Bug report issue" "${LOG}" || { echo "FAIL: a signal kill filed a bug report"; exit 1; }
+[[ ${RC} -eq 143 ]] || { echo "FAIL: exited ${RC} (expected 143)"; cat "${LOG}"; exit 1; }
+grep -q "Model sig/a failed before completing the work: opencode was terminated by a signal" "${LOG}" || { echo "FAIL: signal-killed round not reported"; cat "${LOG}"; exit 1; }
+grep -q "Interrupted (exit 143); not filing a bug report" "${LOG}" || { echo "FAIL: run did not stop as an interruption"; cat "${LOG}"; exit 1; }
+! grep -q "Bug report issue" "${LOG}" || { echo "FAIL: a signal kill filed a bug report"; cat "${LOG}"; exit 1; }
 # The second model must not be tried: an external kill affects the whole run.
-! grep -q "Handing off session" "${LOG}" || { echo "FAIL: a signal kill handed off to another model"; exit 1; }
-
-echo "conahcnuj signal-killed round passed"
+! grep -q "Handing off session" "${LOG}" || { echo "FAIL: a signal kill handed off to another model"; cat "${LOG}"; exit 1; }
