@@ -136,47 +136,87 @@ opencode_command() {
   return 1
 }
 
-# opencode major version: "v1" (0.x.x) or "v2" (1.x.x). Best-effort: when
-# --version cannot be parsed or opencode cannot be located, assume v2 (the
-# currently shipping CLI), so a machine that only has v2 keeps working.
+# opencode major version: "v1" (0.x.x) or "v2" (1.x.x and 2.x). Best-effort:
+# when --version cannot be parsed or opencode cannot be located, assume v2,
+# so a machine that only has v2 keeps working.
 # Cached in OPENCODE_VERSION_CACHE so opencode --version is only run once.
-# Uses command -v directly (not opencode_command) so opencode_command stays
-# a single call site in opencode_run.
+# Probes the same executable opencode_run() will use, including installs that
+# are reachable only through opencode_command()'s fallback paths.
 OPENCODE_VERSION_CACHE=""
+# The yargs-style CLI shipped in opencode 0.x/1.x (including 1.19.x) expects
+# UPPERCASE --log-level values ("DEBUG"/"INFO"/"WARN"/"ERROR"), while the 2.x
+# CLI expects lowercase ("debug"/"info"/"warn"/...). Sending a lowercase value
+# to 1.x makes yargs reject the flag and print opencode's help instead of
+# running, so opencode_version() records which case to use and
+# opencode_run_args() builds a value the backend actually accepts (#1043).
+OPENCODE_LOG_LEVEL_UPPER=""
 opencode_version() {
-  # CI/test harness exports OPENCODE_VERSION=v1|v2 to select the matching
-  # tests without probing the real opencode binary.
+  local label="" ver="" major="" oc="" probe_done="false"
   if [[ -n "${OPENCODE_VERSION:-}" ]]; then
-    OPENCODE_VERSION_CACHE="${OPENCODE_VERSION}"
-    printf '%s\n' "${OPENCODE_VERSION}"
+    label="${OPENCODE_VERSION}"
+  elif [[ -n "${OPENCODE_VERSION_CACHE:-}" ]]; then
+    label="${OPENCODE_VERSION_CACHE}"
+  fi
+
+  # A version env override gives the v1/v2 label but not the --log-level
+  # case: both 1.x (uppercase) and 2.x (lowercase) are labelled v2, and an
+  # invalid value makes yargs print opencode's help and exit (#1043). Probe
+  # the actual backend once and remember which case it accepts. The installed
+  # backend may be a Windows .cmd shim, so check that name too.
+  if [[ -z "${OPENCODE_LOG_LEVEL_UPPER:-}" && "${OPENCODE_TEST_MODE:-0}" != "1" ]]; then
+    # Use the same resolution as opencode_run(): a Windows .cmd shim or an
+    # install outside PATH must be probed too, otherwise the driver would
+    # send lowercase levels to a 1.x CLI and get its help text (#1043).
+    oc="$(command -v opencode 2>/dev/null || command -v opencode.exe 2>/dev/null || command -v opencode.cmd 2>/dev/null || true)"
+    if [[ -z "${oc}" ]]; then
+      oc="$(opencode_command 2>/dev/null || true)"
+    fi
+    if [[ -n "${oc}" ]]; then
+      ver="$("${oc}" --version 2>/dev/null | tr -d '\r' | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" || true
+      if [[ -n "${ver}" ]]; then
+        major="${ver%%.*}"
+        if [[ "${major}" -eq 0 || "${major}" -eq 1 ]]; then
+          OPENCODE_LOG_LEVEL_UPPER="true"
+        else
+          OPENCODE_LOG_LEVEL_UPPER="false"
+        fi
+        probe_done="true"
+      fi
+    fi
+    if [[ "${probe_done}" != "true" ]]; then
+      OPENCODE_LOG_LEVEL_UPPER="false"
+    fi
+  fi
+  # Do not default to false here: a test-mode call (which skips the probe)
+  # must not leave a cached lowercase decision behind for a later real run.
+  # opencode_run_args() treats an unset value as lowercase.
+
+  if [[ -n "${label}" ]]; then
+    OPENCODE_VERSION_CACHE="${label}"
+    printf '%s\n' "${label}"
     return 0
   fi
-  if [[ -n "${OPENCODE_VERSION_CACHE:-}" ]]; then
-    printf '%s\n' "${OPENCODE_VERSION_CACHE}"
-    return 0
+
+  # No env override and no cache: derive the label from the probe above.
+  if [[ -z "${ver:-}" ]]; then
+    label="v2"
+  elif [[ "${major}" -eq 0 ]]; then
+    label="v1"
+  else
+    label="v2"
   fi
-  local oc ver major
-  oc="$(command -v opencode 2>/dev/null || command -v opencode.exe 2>/dev/null || echo "")"
-  if [[ -z "${oc}" ]]; then
-    OPENCODE_VERSION_CACHE="v2"
-    printf 'v2\n'
-    return 0
-  fi
-  ver="$("${oc}" --version 2>/dev/null | tr -d '\r' | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" || true
-  if [[ -z "${ver}" ]]; then OPENCODE_VERSION_CACHE="v2"; printf 'v2\n'; return 0; fi
-  major="${ver%%.*}"
-  if [[ "${major}" -eq 0 ]]; then OPENCODE_VERSION_CACHE="v1"; else OPENCODE_VERSION_CACHE="v2"; fi
-  printf '%s\n' "${OPENCODE_VERSION_CACHE}"
+  OPENCODE_VERSION_CACHE="${label}"
+  printf '%s\n' "${label}"
 }
 
 # Build the `opencode run` argument list for the detected opencode major
 # version. Results are left in the global array OPENCODE_RUN_ARGS.
 #
-# v2 (1.x.x): --auto --print-logs --thinking --format json --model ...[#variant] --session|--title --log-level -
+# v2 (1.x/2.x): --auto --print-logs --thinking --format json --model ...[#variant] --session|--title --log-level -
 # v1 (0.x.x): --model ... [--session|--title]  (v2-only flags omitted)
 #
 # v1 flag support is best-effort: confirm against a real v1 opencode before
-# relying on it, since this environment only ships v2 (1.19.5).
+# relying on it, since CI usually has only a 1.x/2.x backend.
 opencode_run_args() {
   local model="${1}" session_id="${2:-}" effort_variant="${3:-}" version="${4:-}"
   # v2-only flags (--auto --format json --print-logs --thinking --log-level)
@@ -194,7 +234,13 @@ opencode_run_args() {
     OPENCODE_RUN_ARGS=(run --auto --format json --model "${cli_model}" --print-logs --thinking)
     # --print-logs defaults to INFO (~30 lines of boot chatter per model).
     # WARN keeps the diagnostics that matter; override to DEBUG when hunting a model.
-    OPENCODE_RUN_ARGS+=(--log-level "${CONAHCNUJ_OPENCODE_LOG_LEVEL:-warn}")
+    # opencode 1.x accepts only uppercase log levels; 2.x only lowercase.
+    # Match the value to the detected CLI or yargs prints help and exits.
+    local log_level="${CONAHCNUJ_OPENCODE_LOG_LEVEL:-warn}"
+    if [[ "${OPENCODE_LOG_LEVEL_UPPER:-false}" == "true" ]]; then
+      log_level="$(printf '%s' "${log_level}" | tr '[:lower:]' '[:upper:]')"
+    fi
+    OPENCODE_RUN_ARGS+=(--log-level "${log_level}")
   else
     OPENCODE_RUN_ARGS=(run --model "${model}")
   fi
@@ -518,8 +564,10 @@ opencode_run() {
     _mv="$(opencode_effort_variant 2>/dev/null || true)"
     # Mock mode: print what `opencode run` would look like, using the same
     # version-aware arg construction as the real path. The fake opencode in
-    # tests captures these args via OPENCODE_ARGS_FILE.
-    opencode_run_args "${model}" "${session_id:-}" "${_mv}" "$(opencode_version)"
+    # tests captures these args via OPENCODE_ARGS_FILE. Call opencode_version
+    # directly so its log-level-case result is visible to opencode_run_args.
+    opencode_version >/dev/null || true
+    opencode_run_args "${model}" "${session_id:-}" "${_mv}" "${OPENCODE_VERSION_CACHE:-v2}"
     printf 'opencode %s %s\n' "${OPENCODE_RUN_ARGS[*]}" "${prompt}"
     OPENCODE_SESSION_ID="${MOCK_OPENCODE_SESSION_ID:-ses_mock}"
     export OPENCODE_SESSION_ID
@@ -730,7 +778,11 @@ opencode_run() {
   # --thinking makes opencode emit its reasoning parts as JSON events; without
   # it the log shows only tool calls and final answers.
   local version
-  version="$(opencode_version)"
+  # Call opencode_version directly (not in a command substitution): it also
+  # records OPENCODE_LOG_LEVEL_UPPER for this backend, and a subshell would
+  # lose that global before opencode_run_args() reads it (#1043).
+  opencode_version >/dev/null || true
+  version="${OPENCODE_VERSION_CACHE:-v2}"
   local _effort_variant
   _effort_variant="$(opencode_effort_variant 2>/dev/null || true)"
   opencode_run_args "${model}" "${session_id:-}" "${_effort_variant}" "${version}"
