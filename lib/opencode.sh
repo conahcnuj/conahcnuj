@@ -199,6 +199,9 @@ opencode_run_args() {
   else
     OPENCODE_RUN_ARGS+=(--title conahcnuj)
   fi
+  # Newer opencode requires a message positional; "-" makes it read the
+  # prompt from stdin (preserving the E2BIG-safe delivery). See issue #1035.
+  OPENCODE_RUN_ARGS+=("-")
 }
 
 # List available models, one per line. Test mode: $MOCK_OPENCODE_MODELS.
@@ -704,10 +707,10 @@ opencode_run() {
   output_file="$(mktemp)"
   # The prompt carries the issue body plus every collected file (README.md /
   # AGENTS.md), so it can outgrow the OS argument-list limit (E2BIG:
-  # "Argument list too long" from exec). opencode reads the message from stdin
-  # when no positional argument is given, so deliver it there and keep argv
-  # small. The redirect below is on the executable, not the whole pipeline, so
-  # $PIPESTATUS stays aligned with opencode.
+  # "Argument list too long" from exec). Newer opencode requires a message
+  # positional, so pass "-" to make it read the prompt from stdin and keep
+  # argv small. The redirect below is on the executable, not the whole
+  # pipeline, so $PIPESTATUS stays aligned with opencode.
   prompt_file="$(mktemp)"
   printf '%s\n' "${prompt}" > "${prompt_file}"
   local oc_bin
@@ -720,12 +723,9 @@ opencode_run() {
   # it the log shows only tool calls and final answers.
   local version
   version="$(opencode_version)"
-  opencode_run_args "${model}" "${session_id:-}" "" "${version}"
   local _effort_variant
   _effort_variant="$(opencode_effort_variant 2>/dev/null || true)"
-  if [[ -n "${_effort_variant}" ]]; then
-    OPENCODE_RUN_ARGS+=(--variant "${_effort_variant}")
-  fi
+  opencode_run_args "${model}" "${session_id:-}" "${_effort_variant}" "${version}"
   args=("${OPENCODE_RUN_ARGS[@]}")
   status=0
   # tee keeps the raw stream for the session id, the renderer prints the log to
