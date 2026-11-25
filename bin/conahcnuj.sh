@@ -1259,7 +1259,7 @@ persist_missing_model() {
 # base, so a message-only round there stays no work and still falls through to
 # the other models.
 implement() {
-  local title="${1}" body="${2}" extra="${3:-}" workdir model previous_model="" run_failed run_timeout now wrote_message provider tree_changed model_retried head_before head_after committed
+  local title="${1}" body="${2}" extra="${3:-}" workdir model previous_model="" run_failed run_timeout now wrote_message provider tree_changed model_retried head_before head_after committed round_status
   local dead_providers="" quota_providers="" failed_rounds=0 env_failed_rounds=0 quota_failed_rounds=0 ran_without_failure=0
   local model_list known_skipped=""
   local base_branch="${4:-}"
@@ -1267,6 +1267,7 @@ implement() {
   local reply_round="false"
   [[ -n "${prompt_override}" ]] && reply_round="true"
   ENVIRONMENT_DOWN="0"
+  OPENCODE_ROUND_SIGNAL_KILLED="false"
   workdir="$(pwd)"
   echo "Implementing with available models..." >&2
   OPENCODE_USED_MODELS=""
@@ -1319,8 +1320,10 @@ implement() {
         echo "Session handoff was unavailable after ${previous_model}; ${model} will continue from the working tree." >&2
       fi
       run_failed="false"
+      round_status=0
       head_before="$(git -C "${workdir}" rev-parse HEAD 2>/dev/null || true)"
-      if ! CONAHCNUJ_RUN_TIMEOUT_SECONDS="${run_timeout}" opencode_run "${title}" "${body}" "${workdir}" "${model}" "${extra}" "${OPENCODE_SESSION_ID}" "${previous_model}" "${COLLECTED_CONTEXT}" "${prompt_override}"; then
+      CONAHCNUJ_RUN_TIMEOUT_SECONDS="${run_timeout}" opencode_run "${title}" "${body}" "${workdir}" "${model}" "${extra}" "${OPENCODE_SESSION_ID}" "${previous_model}" "${COLLECTED_CONTEXT}" "${prompt_override}" || round_status=$?
+      if [[ "${round_status}" -ne 0 ]]; then
         run_failed="true"
       fi
       OPENCODE_USED_MODELS="${OPENCODE_USED_MODELS}${model} "
@@ -1410,6 +1413,13 @@ implement() {
           # Let the caller commit any .commit-msg the round managed to write
           # before giving up, instead of discarding it with an immediate exit.
           return 1
+        elif [[ "${round_status}" -ge 128 || "${OPENCODE_ROUND_SIGNAL_KILLED}" == "true" ]]; then
+          # A signal kill (external pkill, CI timeout, ...) stops the whole run
+          # as an interruption, like a TERM/INT delivered to the driver itself
+          # (#203): it is not a driver defect, so there is no bug report to file.
+          echo "Model ${model} failed before completing the work: opencode was terminated by a signal." >&2
+          echo "ERROR: opencode was terminated by a signal. Exiting." >&2
+          exit 143
         else
           echo "Model ${model} failed before completing the work; handing off to the next model." >&2
         fi
