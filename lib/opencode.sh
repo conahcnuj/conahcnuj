@@ -172,22 +172,26 @@ opencode_version() {
 # Build the `opencode run` argument list for the detected opencode major
 # version. Results are left in the global array OPENCODE_RUN_ARGS.
 #
-# v2 (1.x.x): --auto --print-logs --thinking --format json --model ... [--variant] --session|--title --log-level
+# v2 (1.x.x): --auto --print-logs --thinking --format json --model ...[#variant] --session|--title --log-level -
 # v1 (0.x.x): --model ... [--session|--title]  (v2-only flags omitted)
 #
 # v1 flag support is best-effort: confirm against a real v1 opencode before
 # relying on it, since this environment only ships v2 (1.19.5).
 opencode_run_args() {
   local model="${1}" session_id="${2:-}" effort_variant="${3:-}" version="${4:-}"
-  # v2-only flags (--auto --format json --print-logs --thinking --log-level
-  # --variant) are added only for v2. v1 gets just --model and --session|--title.
+  # v2-only flags (--auto --format json --print-logs --thinking --log-level)
+  # are added only for v2. v1 gets just --model and --session|--title.
   # --model stays contiguous with --auto --format json on v2 so mock-test
   # string matches still work.
+  # The effort variant is not a separate flag in current opencode: it rides on
+  # the model id as `provider/model#variant` (the CLI rejects --variant). See
+  # issue #1037.
   if [[ "${version}" == "v2" ]]; then
-    OPENCODE_RUN_ARGS=(run --auto --format json --model "${model}" --print-logs --thinking)
+    local cli_model="${model}"
     if [[ -n "${effort_variant}" ]]; then
-      OPENCODE_RUN_ARGS+=(--variant "${effort_variant}")
+      cli_model="${model}#${effort_variant}"
     fi
+    OPENCODE_RUN_ARGS=(run --auto --format json --model "${cli_model}" --print-logs --thinking)
     # --print-logs defaults to INFO (~30 lines of boot chatter per model).
     # WARN keeps the diagnostics that matter; override to DEBUG when hunting a model.
     OPENCODE_RUN_ARGS+=(--log-level "${CONAHCNUJ_OPENCODE_LOG_LEVEL:-warn}")
@@ -201,7 +205,11 @@ opencode_run_args() {
   fi
   # Newer opencode requires a message positional; "-" makes it read the
   # prompt from stdin (preserving the E2BIG-safe delivery). See issue #1035.
-  OPENCODE_RUN_ARGS+=("-")
+  # Only v2 needs the explicit "-" positional; v1 reads stdin by default and
+  # an explicit "-" is not accepted (it surfaces the help text). See #1037.
+  if [[ "${version}" == "v2" ]]; then
+    OPENCODE_RUN_ARGS+=("-")
+  fi
 }
 
 # List available models, one per line. Test mode: $MOCK_OPENCODE_MODELS.

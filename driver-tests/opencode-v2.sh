@@ -60,7 +60,8 @@ test_opencode_run_args_v2() {
   args="$(printf ' %s' "${OPENCODE_RUN_ARGS[@]}")"
   [[ "${args}" == *" --auto --format json --model opencode/mimo-v2.5-free"* ]] || { echo "FAIL: v2 args missing --auto --format json --model contiguous: ${args}"; exit 1; }
   [[ "${args}" == *" --print-logs --thinking"* ]] || { echo "FAIL: v2 args missing --print-logs --thinking: ${args}"; exit 1; }
-  [[ "${args}" == *" --variant max"* ]] || { echo "FAIL: v2 args missing --variant max: ${args}"; exit 1; }
+  [[ "${args}" == *" --model opencode/mimo-v2.5-free#max"* ]] || { echo "FAIL: v2 args missing variant in model id: ${args}"; exit 1; }
+  [[ "${args}" != *" --variant "* ]] || { echo "FAIL: v2 args should not include --variant: ${args}"; exit 1; }
   [[ "${args}" == *" --session ses_abc"* ]] || { echo "FAIL: v2 args missing --session: ${args}"; exit 1; }
   [[ "${args}" == *" --log-level warn"* ]] || { echo "FAIL: v2 args missing --log-level warn: ${args}"; exit 1; }
   # No --title when a session id is present.
