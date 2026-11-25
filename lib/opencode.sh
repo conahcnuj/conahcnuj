@@ -70,6 +70,11 @@ OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED="false"
 # pool and the next model is tried. opencode_run sets it for every round.
 OPENCODE_ROUND_INPUT_CANCELLED="false"
 
+# Whether the round that just finished died because opencode itself was
+# terminated by a signal (SIGTERM/SIGINT from an external pkill, a CI
+# timeout, ...). Not an environment error and not a model that is gone.
+OPENCODE_ROUND_SIGNAL_KILLED="false"
+
 # Probe whether a candidate opencode binary actually runs. Under WSL with
 # interop unavailable a Windows binary is "found" (it sits on a /mnt path and
 # command -v / -f succeed) but executing it fails with "Exec format error", so
@@ -437,6 +442,7 @@ opencode_run() {
   OPENCODE_ROUND_RATE_LIMITED="false"
   OPENCODE_ROUND_INPUT_CANCELLED="false"
   OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED="false"
+  OPENCODE_ROUND_SIGNAL_KILLED="false"
   # A caller may supply the whole prompt (the feedback reply round does): it
   # then takes precedence over both the hand-off and the implementation prompt
   # so the reply instructions and thread ids actually reach the model.
@@ -566,7 +572,17 @@ opencode_run() {
       esac
     done
     unset _tb_var
-    if [[ "${MOCK_OPENCODE_ERROR:-}" == "${model}" || "${OPENCODE_ROUND_ENVIRONMENT}" == "true" || "${OPENCODE_ROUND_MODEL_GONE}" == "true" || "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" || "${OPENCODE_ROUND_RATE_LIMITED}" == "true" || "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" || ( "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" && "${_mock_input_cancelled_committed}" != "true" ) ]]; then
+    for _sk_var in $(compgen -v 2>/dev/null | grep '^MOCK_OPENCODE_' || true); do
+      case "${_sk_var}" in
+        *SIGNAL*|*KILLED*|*TERM*|*KILL*)
+          if [[ " ${!_sk_var:-} " == *" ${model} "* ]]; then
+            OPENCODE_ROUND_SIGNAL_KILLED="true"
+          fi
+          ;;
+      esac
+    done
+    unset _sk_var
+    if [[ "${MOCK_OPENCODE_ERROR:-}" == "${model}" || "${OPENCODE_ROUND_SIGNAL_KILLED}" == "true" || "${OPENCODE_ROUND_ENVIRONMENT}" == "true" || "${OPENCODE_ROUND_MODEL_GONE}" == "true" || "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" || "${OPENCODE_ROUND_RATE_LIMITED}" == "true" || "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" || ( "${OPENCODE_ROUND_INPUT_CANCELLED}" == "true" && "${_mock_input_cancelled_committed}" != "true" ) ]]; then
       if [[ -d "${workdir}" && -w "${workdir}" ]]; then
         printf 'partial change from %s\n' "${model}" >> "${workdir}/conahcnuj.mock"
       fi
@@ -578,12 +594,17 @@ opencode_run() {
         echo "opencode: mock rate limit for ${model} (round stops immediately)" >&2
       elif [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" == "true" ]]; then
         echo "opencode: mock time budget exceeded for ${model} (round stops immediately)" >&2
+      elif [[ "${OPENCODE_ROUND_SIGNAL_KILLED}" == "true" ]]; then
+        echo "opencode: mock signal killed for ${model} (round stops immediately)" >&2
       elif [[ "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" == "true" ]]; then
         echo "opencode: mock quota/billing exhaustion for ${model} (leaves an incomplete change)" >&2
       elif [[ "${OPENCODE_ROUND_ENVIRONMENT}" == "true" ]]; then
         echo "opencode: mock environment error for ${model} (leaves an incomplete change)" >&2
       else
         echo "opencode: mock error for ${model} (leaves an incomplete change)" >&2
+      fi
+      if [[ "${OPENCODE_ROUND_SIGNAL_KILLED}" == "true" ]]; then
+        return 143
       fi
       return 1
     fi
@@ -812,6 +833,15 @@ opencode_run() {
   if [[ "${status}" == "124" ]]; then
     OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED="true"
     echo "opencode exceeded the remaining driver time budget; stopping this model." >&2
+  fi
+  # A round that died because opencode itself was killed by a signal (SIGTERM
+  # from an external pkill, a CI timeout, ...) is a terminal condition, not a
+  # driver defect: stop the run cleanly instead of filing a bug report (#1025).
+  if [[ "${status}" -ge 128 ]] 2>/dev/null; then
+    if [[ "${OPENCODE_ROUND_TIME_BUDGET_EXHAUSTED}" != "true" && "${OPENCODE_ROUND_RATE_LIMITED}" != "true" && "${OPENCODE_ROUND_INPUT_CANCELLED}" != "true" && "${OPENCODE_ROUND_ENVIRONMENT}" != "true" && "${OPENCODE_ROUND_QUOTA_EXHAUSTED}" != "true" && "${OPENCODE_ROUND_MODEL_GONE}" != "true" ]]; then
+      OPENCODE_ROUND_SIGNAL_KILLED="true"
+      echo "opencode was terminated by a signal; stopping this model." >&2
+    fi
   fi
   return "${status}"
 }
