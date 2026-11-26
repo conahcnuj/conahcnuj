@@ -168,7 +168,7 @@ provider の rate limit（`Rate limit exceeded. Please try again later.`）で�
 | `CONAHCNUJ_REPO` | origin から検出 | `owner/repo` |
 | `CONAHCNUJ_MAX_SECONDS` | `259200`（72 h） | 1 実行全体の時間予算（各 opencode ラウンドには残り時間をそのまま渡す。予備 30 秒を引いて 1 秒に切り上げない） |
 | `CONAHCNUJ_HANDOFF_RETRY_SECONDS` | `15` | レビュー依頼リトライ前の待機（`0` で禁止） |
-| `CONAHCNUJ_POLL_CONDITIONS_MIN` / `_MAX` | `15` / `300` | 制約ポーリングの間隔幅（秒・ジッター付き） |
+| `CONAHCNUJ_POLL_CONDITIONS_MIN` / `_MAX` | `15` / `60` | 制約ポーリングの間隔幅（秒・ジッター付き） |
 | `CONAHCNUJ_COMMIT_MODEL` | 未設定 | コミット trailer（`Co-Authored-By: <値>`。プラグインが `provider (model/effort)` を設定する） |
 | `CONAHCNUJ_MAX_EFFORT` | 未設定 | 非空で max effort モード（opencode にモデル ID へ `#max` を付けて渡す (provider/model#max)）。`--max-effort` フラグまたは `CONAHCNUJ_EFFORT=max` でも有効 |
 | `CONAHCNUJ_OPENCODE_LOG_LEVEL` | `warn` | opencode の `--log-level`（デバッグは `debug`） |
