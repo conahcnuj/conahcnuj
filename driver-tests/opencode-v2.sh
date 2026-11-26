@@ -7,7 +7,7 @@ LIB="${HERE}/../lib/opencode.sh"
 # shellcheck source=lib/opencode.sh
 . "${LIB}"
 
-# v2 (1.x.x) opencode 向けのテスト。--auto --format json --print-logs
+# v2 (1.x/2.x) opencode 向けのテスト。--auto --format json --print-logs
 # --thinking --log-level --variant など v2 専用フラグが出力されることを
 # 検証する。
 
@@ -294,7 +294,7 @@ EOF
   [[ "${args}" == *"--model opencode/first"* ]]
   [[ "${args}" == *"--auto --format json"* ]] || { echo "FAIL: v2 session handoff should include --auto --format json: ${args}"; exit 1; }
   [[ "${args}" == *"--print-logs --thinking"* ]] || { echo "FAIL: v2 session handoff should include --print-logs --thinking: ${args}"; exit 1; }
-  [[ "${args}" == *"--log-level warn"* ]] || { echo "FAIL: v2 session handoff should include --log-level warn: ${args}"; exit 1; }
+  [[ "${args}" == *"--log-level WARN"* ]] || { echo "FAIL: 1.x session handoff should include --log-level WARN: ${args}"; exit 1; }
   PATH="${old_path}"
   rm -rf "${tmp}"
   unset OPENCODE_ARGS_FILE FAKE_OPENCODE_EXIT OPENCODE_SESSION_ID OPENCODE_VERSION_CACHE OPENCODE_COMMAND_DONE OPENCODE_COMMAND_PATH
@@ -332,7 +332,7 @@ EOF
   args="$(cat "${OPENCODE_ARGS_FILE}")"
   [[ "${args}" == *"--auto --format json --model opencode/first"* ]] || { echo "FAIL: v2 args missing --auto --format json --model: ${args}"; exit 1; }
   [[ "${args}" == *"--print-logs --thinking"* ]] || { echo "FAIL: v2 args missing --print-logs --thinking: ${args}"; exit 1; }
-  [[ "${args}" == *"--log-level warn"* ]] || { echo "FAIL: v2 args missing --log-level warn: ${args}"; exit 1; }
+  [[ "${args}" == *"--log-level WARN"* ]] || { echo "FAIL: 1.x args missing --log-level WARN: ${args}"; exit 1; }
   [[ "${args}" == *"--title conahcnuj"* ]] || { echo "FAIL: v2 args missing --title conahcnuj: ${args}"; exit 1; }
   PATH="${old_path}"
   rm -rf "${tmp}"
@@ -606,5 +606,112 @@ test_opencode_round_is_quota_exhausted
 test_opencode_round_is_time_budget_exhausted
 test_opencode_run_rate_limit
 test_opencode_run_quota
+
+# The yargs CLI in opencode 1.x (e.g. 1.19.5) accepts only UPPERCASE
+# --log-level values; 2.x accepts only lowercase. Sending the wrong case
+# makes yargs print opencode's help instead of running (#1043). Verify the
+# driver adapts to the detected backend rather than always sending "warn".
+test_opencode_log_level_case() {
+  local tmp old_path old_home saved_version saved_cache saved_upper args
+  saved_version="${OPENCODE_VERSION:-}"
+  saved_cache="${OPENCODE_VERSION_CACHE:-}"
+  saved_upper="${OPENCODE_LOG_LEVEL_UPPER:-}"
+  old_home="${HOME:-}"
+  unset OPENCODE_VERSION OPENCODE_VERSION_CACHE OPENCODE_LOG_LEVEL_UPPER
+  old_path="${PATH}"
+  tmp="$(mktemp -d)"
+  mkdir -p "${tmp}/bin"
+
+  # opencode 1.19.5 -> uppercase log level.
+  cat > "${tmp}/bin/opencode" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "--version" ]]; then
+  printf '1.19.5\n'
+  exit 0
+fi
+printf '%s\n' "$*" > "${OPENCODE_ARGS_FILE}"
+exit 0
+EOF
+  chmod +x "${tmp}/bin/opencode"
+  PATH="${tmp}/bin:${PATH}"
+  export PATH
+  OPENCODE_ARGS_FILE="${tmp}/args.txt"
+  export OPENCODE_ARGS_FILE
+  opencode_version >/dev/null || true
+  [[ "${OPENCODE_VERSION_CACHE}" == "v2" ]] || { echo "FAIL: 1.x should be labelled v2"; exit 1; }
+  [[ "${OPENCODE_LOG_LEVEL_UPPER:-}" == "true" ]] || { echo "FAIL: 1.x needs uppercase log level"; exit 1; }
+  opencode_run "Issue" "Body" "${tmp}" "opencode/m" >/dev/null 2>&1 || true
+  args="$(cat "${OPENCODE_ARGS_FILE}")"
+  [[ "${args}" == *"--log-level WARN"* ]] || { echo "FAIL: 1.x args missing uppercase WARN: ${args}"; exit 1; }
+  [[ "${args}" != *"--log-level warn"* ]] || { echo "FAIL: 1.x got lowercase warn: ${args}"; exit 1; }
+
+  # A user override is uppercased too, so DEBUG/WARN/ERROR all work on 1.x.
+  OPENCODE_LOG_LEVEL_UPPER=""
+  OPENCODE_VERSION_CACHE=""
+  export CONAHCNUJ_OPENCODE_LOG_LEVEL="debug"
+  opencode_run "Issue" "Body" "${tmp}" "opencode/m" >/dev/null 2>&1 || true
+  args="$(cat "${OPENCODE_ARGS_FILE}")"
+  [[ "${args}" == *"--log-level DEBUG"* ]] || { echo "FAIL: 1.x override not uppercased: ${args}"; exit 1; }
+  unset CONAHCNUJ_OPENCODE_LOG_LEVEL
+
+  # opencode 2.4.1 -> lowercase log level (the current CLI).
+  cat > "${tmp}/bin/opencode" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "--version" ]]; then
+  printf '2.4.1\n'
+  exit 0
+fi
+printf '%s\n' "$*" > "${OPENCODE_ARGS_FILE}"
+exit 0
+EOF
+  chmod +x "${tmp}/bin/opencode"
+  OPENCODE_LOG_LEVEL_UPPER=""
+  OPENCODE_VERSION_CACHE=""
+  opencode_version >/dev/null || true
+  [[ "${OPENCODE_VERSION_CACHE}" == "v2" ]] || { echo "FAIL: 2.x should be labelled v2"; exit 1; }
+  [[ "${OPENCODE_LOG_LEVEL_UPPER:-}" == "false" ]] || { echo "FAIL: 2.x needs lowercase log level"; exit 1; }
+  opencode_run "Issue" "Body" "${tmp}" "opencode/m" >/dev/null 2>&1 || true
+  args="$(cat "${OPENCODE_ARGS_FILE}")"
+  [[ "${args}" == *"--log-level warn"* ]] || { echo "FAIL: 2.x args missing lowercase warn: ${args}"; exit 1; }
+  [[ "${args}" != *"--log-level WARN"* ]] || { echo "FAIL: 2.x got uppercase WARN: ${args}"; exit 1; }
+
+  # A 1.x install reachable only through opencode_command()'s fallback paths
+  # (e.g. ~/.opencode/bin on Windows/WSL) must be probed too. Otherwise the
+  # driver assumes 2.x and sends lowercase, and yargs shows help again.
+  mkdir -p "${tmp}/home/.opencode/bin"
+  cat > "${tmp}/home/.opencode/bin/opencode" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "--version" ]]; then
+  printf '1.19.5\n'
+  exit 0
+fi
+printf '%s\n' "$*" > "${OPENCODE_ARGS_FILE}"
+exit 0
+EOF
+  chmod +x "${tmp}/home/.opencode/bin/opencode"
+  HOME="${tmp}/home"
+  export HOME
+  PATH="/usr/bin:/bin"
+  export PATH
+  OPENCODE_LOG_LEVEL_UPPER=""
+  OPENCODE_VERSION_CACHE=""
+  opencode_version >/dev/null || true
+  [[ "${OPENCODE_LOG_LEVEL_UPPER:-}" == "true" ]] || { echo "FAIL: 1.x fallback install needs uppercase log level"; exit 1; }
+  opencode_run "Issue" "Body" "${tmp}" "opencode/m" >/dev/null 2>&1 || true
+  args="$(cat "${OPENCODE_ARGS_FILE}")"
+  [[ "${args}" == *"--log-level WARN"* ]] || { echo "FAIL: 1.x fallback args missing uppercase WARN: ${args}"; exit 1; }
+
+  PATH="${old_path}"
+  HOME="${old_home}"
+  export PATH HOME
+  rm -rf "${tmp}"
+  unset OPENCODE_ARGS_FILE OPENCODE_VERSION OPENCODE_VERSION_CACHE OPENCODE_LOG_LEVEL_UPPER
+  if [[ -n "${saved_version}" ]]; then export OPENCODE_VERSION="${saved_version}"; fi
+  if [[ -n "${saved_cache}" ]]; then export OPENCODE_VERSION_CACHE="${saved_cache}"; fi
+  if [[ -n "${saved_upper}" ]]; then export OPENCODE_LOG_LEVEL_UPPER="${saved_upper}"; fi
+  echo "opencode log-level case (1.x uppercase / 2.x lowercase) passed"
+}
+
+test_opencode_log_level_case
 
 echo "All opencode tests passed"
