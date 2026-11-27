@@ -60,8 +60,9 @@ jobs:
   attempt:
     name: Attempt to resolve issue
     runs-on: ubuntu-latest
-    container:  # ${{ inputs.container_image }}
+    container:
       image: ${{ inputs.container_image }}
+      options: --user root
     environment: ${{ inputs.environment || 'conahcnuj' }}
     if: >-
       inputs.number ||
