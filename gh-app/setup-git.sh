@@ -80,7 +80,13 @@ if [[ "${SCOPE}" == "--local" ]] && ! apply_scope "${SCOPE}"; then
   echo "WARNING: local git config failed; applying to --global instead." >&2
   SCOPE="--global"
 fi
-apply_scope "${SCOPE}"
+
+# Never let a config-write failure (e.g. a read-only global config) abort the
+# whole run with exit 128: the rest of the driver can still proceed, and the
+# missing bot identity surfaces later as a clearer error rather than here.
+if ! apply_scope "${SCOPE}"; then
+  echo "WARNING: git config (${SCOPE}) could not be applied; continuing." >&2
+fi
 
 if [[ "${CONAHCNUJ_SETUP_GIT_VERBOSE:-0}" == "1" ]]; then
   echo "Configured (${SCOPE}):"
