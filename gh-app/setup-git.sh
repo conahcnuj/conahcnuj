@@ -38,23 +38,33 @@ SCOPE="--local"
 # remnant, a half-initialized tree, ...) makes the old `[[ ! -d .git ]]` test
 # believe we are inside a repo, so `--local` was used and failed with
 # "fatal: --local can only be used inside a git repository" (exit 128). Falling
-# back to `--global` keeps the run going; move out of the broken tree first so
-# git does not keep trying to resolve the invalid `.git` while writing the
-# global config.
+# back to `--global` keeps the run going. `git config --global` does not
+# need a repository, so there is no need to leave the (possibly broken)
+# working tree; staying in place keeps the caller's cwd intact.
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "WARNING: not inside a git repository; applying to --global instead." >&2
   SCOPE="--global"
-  cd /
 fi
 
-git config "${SCOPE}" user.name "${BOT_NAME}"
-git config "${SCOPE}" user.email "${BOT_EMAIL}"
-git config "${SCOPE}" credential.helper "${HELPER_CMD}"
-git config "${SCOPE}" commit.gpgsign false
+apply_scope() {
+  local scope="$1"
+  git config "${scope}" user.name "${BOT_NAME}" &&
+  git config "${scope}" user.email "${BOT_EMAIL}" &&
+  git config "${scope}" credential.helper "${HELPER_CMD}" &&
+  git config "${scope}" commit.gpgsign false &&
+  git config "${scope}" alias.vc "${API_COMMIT_CMD}"
+}
+
 # `git vc` is the verified-commit alias (see plugins/gh-app-token.ts). Mirror it
 # into the (local or global) git config so it is available in every shell,
 # not only inside an opencode session whose plugin injects it via GIT_CONFIG_*.
-git config "${SCOPE}" alias.vc "${API_COMMIT_CMD}"
+# If the chosen (local) scope turns out to be unusable even though detection
+# passed, fall back to --global instead of aborting the run with exit 128.
+if [[ "${SCOPE}" == "--local" ]] && ! apply_scope "${SCOPE}"; then
+  echo "WARNING: local git config failed; applying to --global instead." >&2
+  SCOPE="--global"
+fi
+apply_scope "${SCOPE}"
 
 if [[ "${CONAHCNUJ_SETUP_GIT_VERBOSE:-0}" == "1" ]]; then
   echo "Configured (${SCOPE}):"

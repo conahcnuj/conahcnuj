@@ -585,11 +585,10 @@ commit_changes() {
   git add -A
   apply_driver_commit_model
   if [[ "${TEST_MODE}" == "1" ]]; then
-    git config commit.gpgsign false 2>/dev/null || true
     if [[ -n "${CONAHCNUJ_COMMIT_MODEL:-}" ]] && ! printf '%s\n' "${message}" | grep -qiE '^[[:space:]]*co-authored-by:'; then
-      git commit -q -m "${message}" -m "Co-Authored-By: ${CONAHCNUJ_COMMIT_MODEL}" 2>/dev/null || echo "WARNING: nothing to commit (test mode)" >&2
+      git -c commit.gpgsign=false commit -q -m "${message}" -m "Co-Authored-By: ${CONAHCNUJ_COMMIT_MODEL}" 2>/dev/null || echo "WARNING: nothing to commit (test mode)" >&2
     else
-      git commit -q -m "${message}" 2>/dev/null || echo "WARNING: nothing to commit (test mode)" >&2
+      git -c commit.gpgsign=false commit -q -m "${message}" 2>/dev/null || echo "WARNING: nothing to commit (test mode)" >&2
     fi
     return 0
   fi
@@ -621,8 +620,7 @@ remove_empty_todo() {
   rm -f TODO.jsonl
   git add -A -- TODO.jsonl >/dev/null 2>&1 || true
   if [[ "${TEST_MODE}" == "1" ]]; then
-    git config commit.gpgsign false 2>/dev/null || true
-    git commit -q -m "Remove empty TODO.jsonl before hand-off" 2>/dev/null || true
+    git -c commit.gpgsign=false commit -q -m "Remove empty TODO.jsonl before hand-off" 2>/dev/null || true
     return 0
   fi
   bash "${HERE}/../gh-app/api-commit.sh" -m "Remove empty TODO.jsonl before hand-off" || echo "WARNING: could not remove the empty TODO.jsonl; continuing." >&2
