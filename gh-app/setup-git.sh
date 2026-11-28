@@ -13,6 +13,7 @@ ENV_FILE="${HERE}/app.env"
 # tree and reproduce the very "--local can only be used inside a git
 # repository" failure we are avoiding, so drop them for the duration of this
 # script. The global writes below set GIT_DIR=/dev/null per command explicitly.
+# No filesystem-root cd is needed (answers the "root?" review).
 unset GIT_DIR GIT_WORK_TREE
 
 # Real config wins; fall back to the committed example (e.g. fresh clone / CI).
