@@ -7,6 +7,14 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${HERE}/app.env"
 
+# setup-git operates on the caller's working tree (or, on the global config when
+# that is not a real repository). An inherited GIT_DIR / GIT_WORK_TREE (for
+# example from a broken checkout or a parent process) would override the working
+# tree and reproduce the very "--local can only be used inside a git
+# repository" failure we are avoiding, so drop them for the duration of this
+# script. The global writes below set GIT_DIR=/dev/null per command explicitly.
+unset GIT_DIR GIT_WORK_TREE
+
 # Real config wins; fall back to the committed example (e.g. fresh clone / CI).
 if [[ ! -f "${ENV_FILE}" && -f "${HERE}/app.env.example" ]]; then
   ENV_FILE="${HERE}/app.env.example"
