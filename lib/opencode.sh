@@ -15,7 +15,7 @@
 # branch / diff in every header describe the moment that block was produced.
 
 set -euo pipefail
-: "${CONAHCNUJ_TEST_MODE:=${TEST_MODE:-0}}"
+: "${CONAHCNUJ_TEST_MODE:=0}"
 export CONAHCNUJ_TEST_MODE
 if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
   : "${OPENCODE_TEST_MODE:=1}"

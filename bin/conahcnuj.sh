@@ -74,11 +74,10 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Offline-test flag. CONAHCNUJ_TEST_MODE takes precedence; TEST_MODE is the
-# legacy alias kept for backwards compatibility (issue #1053 review). In test
-# mode the GH_API / OPENCODE mock flags default on too, so a single flag is
-# enough to run the whole driver offline; an explicit 0 on either still wins.
-: "${CONAHCNUJ_TEST_MODE:=${TEST_MODE:-0}}"
+# Offline-test flag. In test mode the GH_API / OPENCODE mock flags default
+# on too, so a single flag is enough to run the whole driver offline; an
+# explicit 0 on either still wins.
+: "${CONAHCNUJ_TEST_MODE:=0}"
 export CONAHCNUJ_TEST_MODE
 if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
   : "${GH_API_TEST_MODE:=1}"
