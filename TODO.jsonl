@@ -1,4 +1,0 @@
-{"task":"- [comment 4727632964 by nahcnuj] root?"}
-{"task":"- [comment 4727914496 by conahcnuj] No `cd /` in the current branch: when not in a repo, global config writes run with `GIT_DIR=/dev/null` instead, so git does not try to resolve a broken `.git` while the caller cwd stays unchanged."}
-{"task":"- [comment 4727636859 by nahcnuj] what is `TEST_MODE`?\\nmake the design better"}
-{"task":"- [comment 4727914560 by conahcnuj] `TEST_MODE` is the legacy offline-test alias; the driver now checks `CONAHCNUJ_TEST_MODE` first and falls back to `TEST_MODE`. Test-mode commits use `git -c commit.gpgsign=false` per command instead of mutating repository config."}
