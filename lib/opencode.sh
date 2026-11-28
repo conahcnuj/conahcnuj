@@ -529,7 +529,7 @@ opencode_run() {
   # GitHub API call the agent makes would see an empty token. Export it here
   # from the same source the driver uses, so it is inherited by opencode's
   # child shells regardless of the plugin's state (#1311).
-  if [[ "${OPENCODE_TEST_MODE:-0}" == "1" || "${CONAHCNUJ_TEST_MODE}" == "1" || "${TEST_MODE:-0}" == "1" ]]; then
+  if [[ "${OPENCODE_TEST_MODE:-0}" == "1" || "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
     # Override any ambient/stale value (mirrors the plugin, which always issues
     # the App token instead of trusting a pre-existing GH_TOKEN).
     GH_TOKEN="test-token"
