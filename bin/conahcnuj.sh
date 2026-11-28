@@ -2322,7 +2322,7 @@ start_issue() {
     INITIAL_TODO_CONTENT="$(cat TODO.jsonl)"
     git add -A -- TODO.jsonl >/dev/null 2>&1 || true
     if [[ "${TEST_MODE}" == "1" ]]; then
-      git commit -q -m "Initial commit" 2>/dev/null || true
+      git -c commit.gpgsign=false commit -q -m "Initial commit" 2>/dev/null || true
     else
       bash "${HERE}/../gh-app/api-commit.sh" -m "Initial commit" >/dev/null 2>&1 || echo "WARNING: could not create the initial commit; continuing." >&2
     fi

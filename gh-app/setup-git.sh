@@ -39,8 +39,10 @@ SCOPE="--local"
 # believe we are inside a repo, so `--local` was used and failed with
 # "fatal: --local can only be used inside a git repository" (exit 128). Falling
 # back to `--global` keeps the run going. `git config --global` does not
-# need a repository, so there is no need to leave the (possibly broken)
-# working tree; staying in place keeps the caller's cwd intact.
+# need a repository (it writes ~/.gitconfig), so we stay in the current
+# directory instead of jumping to "/" (which only obscured the caller's cwd
+# and never helped git resolve anything). Staying put keeps the caller's cwd
+# intact and avoids touching the (possibly broken) working tree.
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "WARNING: not inside a git repository; applying to --global instead." >&2
   SCOPE="--global"
