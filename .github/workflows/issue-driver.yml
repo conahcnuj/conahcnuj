@@ -164,32 +164,11 @@ jobs:
               break
             fi
           done
-          if [[ -n "${PWSH}" ]]; then
-            "${PWSH}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${GITHUB_WORKSPACE}/driver/install.ps1"
-          else
-            # Fallback for images where pwsh cannot be installed: mirror the
-            # essential parts of install.ps1 with plain shell tools.
-            mkdir -p "${HOME}/.local/bin" "${HOME}/.local/gh-app" "${HOME}/.local/lib"
-            cp "${GITHUB_WORKSPACE}/driver/bin/conahcnuj.sh" "${HOME}/.local/bin/conahcnuj"
-            chmod +x "${HOME}/.local/bin/conahcnuj"
-            cp -a "${GITHUB_WORKSPACE}/driver/gh-app/." "${HOME}/.local/gh-app/"
-            cp -a "${GITHUB_WORKSPACE}/driver/lib/." "${HOME}/.local/lib/"
-            mkdir -p "${HOME}/.config/opencode/plugins/lib" "${HOME}/.config/opencode/gh-app"
-            cp "${GITHUB_WORKSPACE}/driver/plugins/gh-app-token.ts" "${HOME}/.config/opencode/plugins/gh-app-token.ts"
-            cp "${GITHUB_WORKSPACE}/driver/plugins/lib/gh-app-commit.ts" "${HOME}/.config/opencode/plugins/lib/gh-app-commit.ts"
-            cp -a "${GITHUB_WORKSPACE}/driver/gh-app/." "${HOME}/.config/opencode/gh-app/"
-            if [[ -f "${GITHUB_WORKSPACE}/driver/opencode/AGENTS.md" && ! -f "${HOME}/.config/opencode/AGENTS.md" ]]; then
-              {
-                echo "<!-- conahcnuj:begin -->"
-                cat "${GITHUB_WORKSPACE}/driver/opencode/AGENTS.md"
-                echo "<!-- conahcnuj:end -->"
-              } > "${HOME}/.config/opencode/AGENTS.md"
-            fi
-            if [[ -f "${GITHUB_WORKSPACE}/driver/bin/git-vc" ]]; then
-              cp "${GITHUB_WORKSPACE}/driver/bin/git-vc" "${HOME}/.local/bin/git-vc"
-              chmod +x "${HOME}/.local/bin/git-vc"
-            fi
+          if [[ -z "${PWSH}" ]]; then
+            echo "::error::PowerShell (pwsh/powershell) is required to run install.ps1, but could not be installed." >&2
+            exit 1
           fi
+          "${PWSH}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${GITHUB_WORKSPACE}/driver/install.ps1"
           rm -rf "${GITHUB_WORKSPACE}/driver"
 
       # Check out the target repository normally (into the working tree root)
