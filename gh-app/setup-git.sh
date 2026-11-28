@@ -31,37 +31,46 @@ BASH_EXE="${BASH_EXE:-C:/Program Files/Git/bin/bash.exe}"
 HELPER_CMD="!\"${BASH_EXE}\" \"${HELPER//\\//}\""
 API_COMMIT_CMD="!\"${BASH_EXE}\" \"${API_COMMIT//\\//}\""
 
-SCOPE="--local"
 # `git config --local` is only valid inside a git repository. Detect that by
 # asking git itself instead of peeking at a `.git` entry: a directory or file
 # named `.git` that does not point at a real repository (a stale checkout
-# remnant, a half-initialized tree, ...) makes the old `[[ ! -d .git ]]` test
+# remnant, a half-initialized tree, ...) makes a naive `[[ -d .git ]]` test
 # believe we are inside a repo, so `--local` was used and failed with
-# "fatal: --local can only be used inside a git repository" (exit 128). Falling
-# back to `--global` keeps the run going. Even `git config --global` tries
-# to resolve a (possibly broken) .git in the current directory and fails on
-# a malformed .git entry, so point GIT_DIR at /dev/null for the global writes
-# instead of jumping to "/" (which obscured the caller's cwd and never helped
-# git resolve anything). This keeps the caller's cwd intact while handling
-# every broken-.git case (absent, empty dir, or malformed file).
+# "fatal: --local can only be used inside a git repository" (exit 128).
+#
+# When we are not inside a real repository, the writes go to the global config
+# instead. Those global writes must not inherit a (possibly broken) `.git` in
+# the caller's current directory: even `git config --global` tries to resolve
+# such an entry and fails. Rather than mutating the caller's cwd (cd /) or
+# leaking GIT_DIR into the caller's environment (export), GIT_DIR is pointed at
+# /dev/null for each global write only, confining the workaround to the single
+# command that needs it and leaving cwd and the environment untouched.
+SCOPE="--local"
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "WARNING: not inside a git repository; applying to --global instead." >&2
   SCOPE="--global"
   export GIT_DIR=/dev/null
 fi
 
+run_git_config() {
+  local scope="$1"
+  shift
+  git config "${scope}" "$@"
+}
+
 apply_scope() {
   local scope="$1"
-  git config "${scope}" user.name "${BOT_NAME}" &&
-  git config "${scope}" user.email "${BOT_EMAIL}" &&
-  git config "${scope}" credential.helper "${HELPER_CMD}" &&
-  git config "${scope}" commit.gpgsign false &&
-  git config "${scope}" alias.vc "${API_COMMIT_CMD}"
+  run_git_config "${scope}" user.name "${BOT_NAME}" &&
+  run_git_config "${scope}" user.email "${BOT_EMAIL}" &&
+  run_git_config "${scope}" credential.helper "${HELPER_CMD}" &&
+  run_git_config "${scope}" commit.gpgsign false &&
+  run_git_config "${scope}" alias.vc "${API_COMMIT_CMD}"
 }
 
 # `git vc` is the verified-commit alias (see plugins/gh-app-token.ts). Mirror it
 # into the (local or global) git config so it is available in every shell,
 # not only inside an opencode session whose plugin injects it via GIT_CONFIG_*.
+
 # If the chosen (local) scope turns out to be unusable even though detection
 # passed, fall back to --global instead of aborting the run with exit 128.
 if [[ "${SCOPE}" == "--local" ]] && ! apply_scope "${SCOPE}"; then
