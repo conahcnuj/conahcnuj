@@ -1,0 +1,1 @@
+Fix setup-git.sh crash outside a git repository
