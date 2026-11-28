@@ -44,11 +44,9 @@ conahcnuj が読む環境変数の全量です。値の意味や設定ファイ�
 | `CONAHCNUJ_SETUP_GIT_VERBOSE` | `0` | `1` で `setup-git.sh` が設定内容の一覧を表示する（既定は何も出力しない） |
 | `CONAHCNUJ_MISSING_MODELS_FILE` | `<gh-app>/missing-models` | 永久に使えない（deprecated / 削除済み）モデルの記録先。ラウンド前に読み、判明したモデルを追記する |
 | `CONAHCNUJ_RATE_LIMIT_WATCH_SECONDS` | `1` | provider の rate limit を検知してラウンドを打ち切る監視間隔（秒）。再試行を待たず次モデルへ移る |
-| `CONAHCNUJ_TEST_MODE` | `0` | `1` で offline テストモード |
+| `CONAHCNUJ_TEST_MODE` | `0` | `1` で offline テストモード（モック API テープ + モック opencode）。テストモードのローカルコミットは `git -c commit.gpgsign=false` を使い、リポジトリ設定を書き換えない |
 | `GITHUB_ACTIONS` | - | `true` / `1` で CI モード: レビュー依頼（reviewer 設定）をもって正常終了し、承認待ちしない |
 | `CONAHCNUJ_CI` | - | `true` / `1` で CI モードを明示的に有効化（`GITHUB_ACTIONS` が無い環境向け） |
-
-`TEST_MODE` は legacy alias で、`CONAHCNUJ_TEST_MODE` が未設定のときだけ参照される。
 
 ## ドライバ ↔ プラグイン連携（自動設定）
 

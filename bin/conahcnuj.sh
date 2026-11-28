@@ -48,7 +48,6 @@
 #                            disables the pause)
 #   CONAHCNUJ_POLL_CONDITIONS_MIN/MAX  rate-limited poll window (default 15/60 s)
 #   CONAHCNUJ_TEST_MODE=1    offline driver test (mock API tape + mock opencode)
-#                            (TEST_MODE is the legacy alias for the same flag)
 #   CONAHCNUJ_COMMIT_MODEL   Co-Authored-By trailer value; when unset, the
 #                            driver uses the plugin label (provider
 #                            (model/effort)) or builds the same shape from
@@ -92,11 +91,10 @@ START_TIME="$(date +%s)"
 # that export as a new explicit override.
 USER_COMMIT_MODEL="${CONAHCNUJ_COMMIT_MODEL:-}"
 
-# Normalize the offline-test flag once: CONAHCNUJ_TEST_MODE is canonical,
-# TEST_MODE is the legacy alias kept for backwards compatibility. Normalizing
-# here keeps the rest of the driver (and the libs it sources) free of the
-# repeated fallback.
-: "${CONAHCNUJ_TEST_MODE:=${TEST_MODE:-0}}"
+# Offline-test flag: CONAHCNUJ_TEST_MODE=1 enables the offline driver test
+# mode (mock API tape + mock opencode). Normalized once here so the rest of
+# the driver (and the libs it sources) can read the canonical variable.
+: "${CONAHCNUJ_TEST_MODE:=0}"
 export CONAHCNUJ_TEST_MODE
 
 # shellcheck source=lib/rate-limit.sh
