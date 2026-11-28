@@ -142,10 +142,34 @@ jobs:
 
       - name: Install the driver (cross-repository)
         if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
-        shell: pwsh
+        shell: bash
         run: |
-          & "${env:GITHUB_WORKSPACE}/driver/install.ps1"
-          Remove-Item -Recurse -Force "${env:GITHUB_WORKSPACE}/driver"
+          # The job may run inside a user-provided container that does not
+          # ship PowerShell, so deploy the driver with plain shell tools instead
+          # of install.ps1 (which requires pwsh). Only the files the driver
+          # needs at runtime are copied; opencode's own config is left to the
+          # container image / host mount.
+          mkdir -p "${HOME}/.local/bin" "${HOME}/.local/gh-app" "${HOME}/.local/lib"
+          cp "${GITHUB_WORKSPACE}/driver/bin/conahcnuj.sh" "${HOME}/.local/bin/conahcnuj"
+          chmod +x "${HOME}/.local/bin/conahcnuj"
+          cp -a "${GITHUB_WORKSPACE}/driver/gh-app/." "${HOME}/.local/gh-app/"
+          cp -a "${GITHUB_WORKSPACE}/driver/lib/." "${HOME}/.local/lib/"
+
+          # Deploy the opencode plugin + global rules into the container's
+          # opencode config dir, mirroring install.ps1 (so `git vc` is available
+          # to the agent even in a container without PowerShell).
+          mkdir -p "${HOME}/.config/opencode/plugins/lib" "${HOME}/.config/opencode/gh-app"
+          cp "${GITHUB_WORKSPACE}/driver/plugins/gh-app-token.ts" "${HOME}/.config/opencode/plugins/gh-app-token.ts"
+          cp "${GITHUB_WORKSPACE}/driver/plugins/lib/gh-app-commit.ts" "${HOME}/.config/opencode/plugins/lib/gh-app-commit.ts"
+          cp -a "${GITHUB_WORKSPACE}/driver/gh-app/." "${HOME}/.config/opencode/gh-app/"
+          if [[ -f "${GITHUB_WORKSPACE}/driver/opencode/AGENTS.md" && ! -f "${HOME}/.config/opencode/AGENTS.md" ]]; then
+            {
+              echo "<!-- conahcnuj:begin -->"
+              cat "${GITHUB_WORKSPACE}/driver/opencode/AGENTS.md"
+              echo "<!-- conahcnuj:end -->"
+            } > "${HOME}/.config/opencode/AGENTS.md"
+          fi
+          rm -rf "${GITHUB_WORKSPACE}/driver"
 
       # Check out the target repository normally (into the working tree root)
       # when it is not the driver's own repository. This runs after the driver
@@ -201,6 +225,7 @@ jobs:
           BOT_USER_ID="$(bash "${ghapp}/bot-user-id.sh")"
           printf 'BOT_USER_ID="%s"\n' "${BOT_USER_ID}" >> "${ghapp}/app.env"
           if [[ "${CROSS_REPO}" == "true" ]]; then
+            mkdir -p "${ghapp_config}"
             cp "${ghapp}/app.env" "${ghapp_config}/app.env"
           fi
 

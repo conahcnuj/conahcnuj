@@ -47,5 +47,10 @@ COPY gh-app/ /opt/conahcnuj/gh-app/
 # as "dubious ownership". The container is disposable, so trust everything.
 RUN git config --global --add safe.directory '*'
 
+# The driver (and the git-vc subcommand) are shell scripts copied from the
+# build context, whose executable bit may not survive the COPY depending on
+# the source tree, so make sure they can be exec'd as the container entrypoint.
+RUN chmod +x /opt/conahcnuj/bin/conahcnuj.sh /opt/conahcnuj/bin/git-vc
+
 WORKDIR /work
 ENTRYPOINT ["/opt/conahcnuj/bin/conahcnuj.sh"]
