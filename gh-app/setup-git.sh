@@ -32,9 +32,19 @@ HELPER_CMD="!\"${BASH_EXE}\" \"${HELPER//\\//}\""
 API_COMMIT_CMD="!\"${BASH_EXE}\" \"${API_COMMIT//\\//}\""
 
 SCOPE="--local"
-if [[ ! -d .git ]] && ! git rev-parse --git-dir >/dev/null 2>&1; then
+# `git config --local` is only valid inside a git repository. Detect that by
+# asking git itself instead of peeking at a `.git` entry: a directory or file
+# named `.git` that does not point at a real repository (a stale checkout
+# remnant, a half-initialized tree, ...) makes the old `[[ ! -d .git ]]` test
+# believe we are inside a repo, so `--local` was used and failed with
+# "fatal: --local can only be used inside a git repository" (exit 128). Falling
+# back to `--global` keeps the run going; move out of the broken tree first so
+# git does not keep trying to resolve the invalid `.git` while writing the
+# global config.
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "WARNING: not inside a git repository; applying to --global instead." >&2
   SCOPE="--global"
+  cd /
 fi
 
 git config "${SCOPE}" user.name "${BOT_NAME}"
