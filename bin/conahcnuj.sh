@@ -96,8 +96,6 @@ USER_COMMIT_MODEL="${CONAHCNUJ_COMMIT_MODEL:-}"
 # TEST_MODE is the legacy alias kept for backwards compatibility. Normalizing
 # here keeps the rest of the driver (and the libs it sources) free of the
 # repeated fallback.
-# Normalize the offline-test flag once: CONAHCNUJ_TEST_MODE is canonical,
-# TEST_MODE is the legacy alias kept for backwards compatibility.
 : "${CONAHCNUJ_TEST_MODE:=${TEST_MODE:-0}}"
 export CONAHCNUJ_TEST_MODE
 
