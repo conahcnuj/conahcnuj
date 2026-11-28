@@ -38,14 +38,16 @@ SCOPE="--local"
 # remnant, a half-initialized tree, ...) makes the old `[[ ! -d .git ]]` test
 # believe we are inside a repo, so `--local` was used and failed with
 # "fatal: --local can only be used inside a git repository" (exit 128). Falling
-# back to `--global` keeps the run going. `git config --global` does not
-# need a repository (it writes ~/.gitconfig), so we stay in the current
-# directory instead of jumping to "/" (which only obscured the caller's cwd
-# and never helped git resolve anything). Staying put keeps the caller's cwd
-# intact and avoids touching the (possibly broken) working tree.
+# back to `--global` keeps the run going. Even `git config --global` tries
+# to resolve a (possibly broken) .git in the current directory and fails on
+# a malformed .git entry, so point GIT_DIR at /dev/null for the global writes
+# instead of jumping to "/" (which obscured the caller's cwd and never helped
+# git resolve anything). This keeps the caller's cwd intact while handling
+# every broken-.git case (absent, empty dir, or malformed file).
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "WARNING: not inside a git repository; applying to --global instead." >&2
   SCOPE="--global"
+  export GIT_DIR=/dev/null
 fi
 
 apply_scope() {
@@ -65,6 +67,7 @@ apply_scope() {
 if [[ "${SCOPE}" == "--local" ]] && ! apply_scope "${SCOPE}"; then
   echo "WARNING: local git config failed; applying to --global instead." >&2
   SCOPE="--global"
+  export GIT_DIR=/dev/null
 fi
 apply_scope "${SCOPE}"
 

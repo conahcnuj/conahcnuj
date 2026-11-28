@@ -47,6 +47,7 @@ printf '\377\376f\000i\000x\000:\000 \000k\000e\000e\000p\000 \000i\000t\000\n\0
   # shellcheck source=bin/conahcnuj.sh
   source "${DRIVER}"
   TEST_MODE=1
+  CONAHCNUJ_TEST_MODE=1
   commit_changes 2> "${ROOT}/commit.log"
 )
 
