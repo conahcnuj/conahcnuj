@@ -32,7 +32,13 @@ HELPER_CMD="!\"${BASH_EXE}\" \"${HELPER//\\//}\""
 API_COMMIT_CMD="!\"${BASH_EXE}\" \"${API_COMMIT//\\//}\""
 
 SCOPE="--local"
-if [[ ! -d .git ]] && ! git rev-parse --git-dir >/dev/null 2>&1; then
+# Detect a usable git work tree by asking git itself, not by looking for a
+# `.git` directory: a stray/empty `.git` directory, a worktree whose gitdir
+# points elsewhere, or a run from a subdirectory of a repository can all make
+# the filesystem check disagree with git, which previously left SCOPE at
+# `--local` outside a repository and crashed with
+# "fatal: --local can only be used inside a git repository" (exit 128).
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "WARNING: not inside a git repository; applying to --global instead." >&2
   SCOPE="--global"
 fi
