@@ -41,9 +41,10 @@ API_COMMIT_CMD="!\"${BASH_EXE}\" \"${API_COMMIT//\\//}\""
 # When we are not inside a real repository, the writes go to the global config
 # instead. Those global writes must not inherit a (possibly broken) `.git` in
 # the caller's current directory: even `git config --global` tries to resolve
-# such an entry and fails. Run them from the filesystem root (`/`) in a
-# subshell so the caller's cwd and environment stay untouched while git never
-# sees the broken entry.
+# such an entry and fails. Point GIT_DIR at /dev/null for each global write
+# only, confining the workaround to the single command that needs it: this
+# leaves the caller's cwd and environment untouched (no `cd`, no exported
+# variable) while git never tries to resolve the broken entry.
 SCOPE="--local"
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "WARNING: not inside a git repository; applying to --global instead." >&2
@@ -54,7 +55,7 @@ run_git_config() {
   local scope="$1"
   shift
   if [[ "${scope}" == "--global" ]]; then
-    (cd / && git config "${scope}" "$@")
+    GIT_DIR=/dev/null git config "${scope}" "$@"
   else
     git config "${scope}" "$@"
   fi
@@ -84,7 +85,7 @@ apply_scope "${SCOPE}"
 if [[ "${CONAHCNUJ_SETUP_GIT_VERBOSE:-0}" == "1" ]]; then
   echo "Configured (${SCOPE}):"
   if [[ "${SCOPE}" == "--global" ]]; then
-    (cd / && git config ${SCOPE} --get-regexp "^(user\.(name|email)|credential\.helper|commit\.gpgsign|alias\.vc)$" 2>/dev/null || true)
+    GIT_DIR=/dev/null git config ${SCOPE} --get-regexp "^(user\.(name|email)|credential\.helper|commit\.gpgsign|alias\.vc)$" 2>/dev/null || true
   else
     git config ${SCOPE} --get-regexp "^(user\.(name|email)|credential\.helper|commit\.gpgsign|alias\.vc)$" 2>/dev/null || true
   fi

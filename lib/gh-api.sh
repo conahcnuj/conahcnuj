@@ -110,8 +110,9 @@ gh_api_escape() {
 
 # Read a single line from stdin (used by every test-mode function so that a
 # caller can "feed a tape" of one JSON response per API call).
-# Offline-test flag: default to 0 when unset.
-: "${CONAHCNUJ_TEST_MODE:=0}"
+# Normalize the offline-test flag (CONAHCNUJ_TEST_MODE canonical, TEST_MODE
+# legacy alias) so callers do not have to repeat the fallback.
+: "${CONAHCNUJ_TEST_MODE:=${TEST_MODE:-0}}"
 export CONAHCNUJ_TEST_MODE
 
 gh_api_read_line() {
