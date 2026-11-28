@@ -7,6 +7,15 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${HERE}/app.env"
 
+# setup-git operates on the caller's working tree (or, on the global config when
+# that is not a real repository). An inherited GIT_DIR / GIT_WORK_TREE (for
+# example from a broken checkout or a parent process) would override the working
+# tree and reproduce the very "--local can only be used inside a git
+# repository" failure we are avoiding, so drop them for the duration of this
+# script. The global writes below set GIT_DIR=/dev/null per command explicitly.
+# No filesystem-root cd is needed (answers the "root?" review).
+unset GIT_DIR GIT_WORK_TREE
+
 # Real config wins; fall back to the committed example (e.g. fresh clone / CI).
 if [[ ! -f "${ENV_FILE}" && -f "${HERE}/app.env.example" ]]; then
   ENV_FILE="${HERE}/app.env.example"
@@ -31,24 +40,70 @@ BASH_EXE="${BASH_EXE:-C:/Program Files/Git/bin/bash.exe}"
 HELPER_CMD="!\"${BASH_EXE}\" \"${HELPER//\\//}\""
 API_COMMIT_CMD="!\"${BASH_EXE}\" \"${API_COMMIT//\\//}\""
 
+# `git config --local` is only valid inside a git repository. Detect that by
+# asking git itself instead of peeking at a `.git` entry: a directory or file
+# named `.git` that does not point at a real repository (a stale checkout
+# remnant, a half-initialized tree, ...) makes a naive `[[ -d .git ]]` test
+# believe we are inside a repo, so `--local` was used and failed with
+# "fatal: --local can only be used inside a git repository" (exit 128).
+#
+# When we are not inside a real repository, the writes go to the global config
+# instead. Those global writes must not inherit a (possibly broken) `.git` in
+# the caller's current directory: even `git config --global` tries to resolve
+# such an entry and fails. Point GIT_DIR at /dev/null for each global write
+# only, confining the workaround to the single command that needs it: this
+# leaves the caller's cwd and environment untouched (no `cd`, no exported
+# variable) while git never tries to resolve the broken entry.
 SCOPE="--local"
-if [[ ! -d .git ]] && ! git rev-parse --git-dir >/dev/null 2>&1; then
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "WARNING: not inside a git repository; applying to --global instead." >&2
   SCOPE="--global"
 fi
 
-git config "${SCOPE}" user.name "${BOT_NAME}"
-git config "${SCOPE}" user.email "${BOT_EMAIL}"
-git config "${SCOPE}" credential.helper "${HELPER_CMD}"
-git config "${SCOPE}" commit.gpgsign false
+run_git_config() {
+  local scope="$1"
+  shift
+  if [[ "${scope}" == "--global" ]]; then
+    GIT_DIR=/dev/null git config "${scope}" "$@"
+  else
+    git config "${scope}" "$@"
+  fi
+}
+
+apply_scope() {
+  local scope="$1"
+  run_git_config "${scope}" user.name "${BOT_NAME}" &&
+  run_git_config "${scope}" user.email "${BOT_EMAIL}" &&
+  run_git_config "${scope}" credential.helper "${HELPER_CMD}" &&
+  run_git_config "${scope}" commit.gpgsign false &&
+  run_git_config "${scope}" alias.vc "${API_COMMIT_CMD}"
+}
+
 # `git vc` is the verified-commit alias (see plugins/gh-app-token.ts). Mirror it
 # into the (local or global) git config so it is available in every shell,
 # not only inside an opencode session whose plugin injects it via GIT_CONFIG_*.
-git config "${SCOPE}" alias.vc "${API_COMMIT_CMD}"
+
+# If the chosen (local) scope turns out to be unusable even though detection
+# passed, fall back to --global instead of aborting the run with exit 128.
+if [[ "${SCOPE}" == "--local" ]] && ! apply_scope "${SCOPE}"; then
+  echo "WARNING: local git config failed; applying to --global instead." >&2
+  SCOPE="--global"
+fi
+
+# Never let a config-write failure (e.g. a read-only global config) abort the
+# whole run with exit 128: the rest of the driver can still proceed, and the
+# missing bot identity surfaces later as a clearer error rather than here.
+if ! apply_scope "${SCOPE}"; then
+  echo "WARNING: git config (${SCOPE}) could not be applied; continuing." >&2
+fi
 
 if [[ "${CONAHCNUJ_SETUP_GIT_VERBOSE:-0}" == "1" ]]; then
   echo "Configured (${SCOPE}):"
-  git config ${SCOPE} --get-regexp "^(user\.(name|email)|credential\.helper|commit\.gpgsign|alias\.vc)$" 2>/dev/null || true
+  if [[ "${SCOPE}" == "--global" ]]; then
+    GIT_DIR=/dev/null git config ${SCOPE} --get-regexp "^(user\.(name|email)|credential\.helper|commit\.gpgsign|alias\.vc)$" 2>/dev/null || true
+  else
+    git config ${SCOPE} --get-regexp "^(user\.(name|email)|credential\.helper|commit\.gpgsign|alias\.vc)$" 2>/dev/null || true
+  fi
   echo
   echo "Test with: git ls-remote https://github.com/<owner>/<repo>.git HEAD"
 fi

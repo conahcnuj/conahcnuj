@@ -13,6 +13,12 @@
 # caller supplies one JSON document per API call, in call order.
 
 set -euo pipefail
+: "${CONAHCNUJ_TEST_MODE:=${TEST_MODE:-0}}"
+export CONAHCNUJ_TEST_MODE
+if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
+  : "${GH_API_TEST_MODE:=1}"
+  export GH_API_TEST_MODE
+fi
 # Ignore SIGPIPE so a closed consumer (e.g. head) cannot kill this
 # shell or print "printf: write error: Broken pipe"; failed writes are
 # handled by the `2>/dev/null || true` guards on each printf.
@@ -118,7 +124,7 @@ gh_api_read_line() {
 
 # App installation token. Test mode returns a dummy without any network I/O.
 gh_api_get_token() {
-  if [[ "${GH_API_TEST_MODE:-0}" == "1" || "${CONAHCNUJ_TEST_MODE:-0}" == "1" || "${TEST_MODE:-0}" == "1" ]]; then
+  if [[ "${GH_API_TEST_MODE:-0}" == "1" || "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
     printf '%s\n' "test-token" 2>/dev/null || true
     return 0
   fi
