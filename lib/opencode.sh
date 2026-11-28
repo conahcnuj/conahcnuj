@@ -19,9 +19,8 @@ set -euo pipefail
 # Not HERE: bin/conahcnuj.sh owns that name and resolves ../gh-app with it, so
 # overwriting it here would break the driver's api-commit.sh / setup-git.sh
 # paths. Sourcing a lib must not clobber the caller's variables.
-# Normalize the offline-test flag (CONAHCNUJ_TEST_MODE canonical, TEST_MODE
-# legacy alias).
-: "${CONAHCNUJ_TEST_MODE:=${TEST_MODE:-0}}"
+# Offline-test flag: default to 0 when unset.
+: "${CONAHCNUJ_TEST_MODE:=0}"
 export CONAHCNUJ_TEST_MODE
 
 OPENCODE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

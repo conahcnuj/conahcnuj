@@ -41,21 +41,23 @@ API_COMMIT_CMD="!\"${BASH_EXE}\" \"${API_COMMIT//\\//}\""
 # When we are not inside a real repository, the writes go to the global config
 # instead. Those global writes must not inherit a (possibly broken) `.git` in
 # the caller's current directory: even `git config --global` tries to resolve
-# such an entry and fails. Rather than mutating the caller's cwd (cd /) or
-# leaking GIT_DIR into the caller's environment (export), GIT_DIR is pointed at
-# /dev/null for each global write only, confining the workaround to the single
-# command that needs it and leaving cwd and the environment untouched.
+# such an entry and fails. Run them from the filesystem root (`/`) in a
+# subshell so the caller's cwd and environment stay untouched while git never
+# sees the broken entry.
 SCOPE="--local"
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "WARNING: not inside a git repository; applying to --global instead." >&2
   SCOPE="--global"
-  export GIT_DIR=/dev/null
 fi
 
 run_git_config() {
   local scope="$1"
   shift
-  git config "${scope}" "$@"
+  if [[ "${scope}" == "--global" ]]; then
+    (cd / && git config "${scope}" "$@")
+  else
+    git config "${scope}" "$@"
+  fi
 }
 
 apply_scope() {
@@ -76,13 +78,16 @@ apply_scope() {
 if [[ "${SCOPE}" == "--local" ]] && ! apply_scope "${SCOPE}"; then
   echo "WARNING: local git config failed; applying to --global instead." >&2
   SCOPE="--global"
-  export GIT_DIR=/dev/null
 fi
 apply_scope "${SCOPE}"
 
 if [[ "${CONAHCNUJ_SETUP_GIT_VERBOSE:-0}" == "1" ]]; then
   echo "Configured (${SCOPE}):"
-  git config ${SCOPE} --get-regexp "^(user\.(name|email)|credential\.helper|commit\.gpgsign|alias\.vc)$" 2>/dev/null || true
+  if [[ "${SCOPE}" == "--global" ]]; then
+    (cd / && git config ${SCOPE} --get-regexp "^(user\.(name|email)|credential\.helper|commit\.gpgsign|alias\.vc)$" 2>/dev/null || true)
+  else
+    git config ${SCOPE} --get-regexp "^(user\.(name|email)|credential\.helper|commit\.gpgsign|alias\.vc)$" 2>/dev/null || true
+  fi
   echo
   echo "Test with: git ls-remote https://github.com/<owner>/<repo>.git HEAD"
 fi
