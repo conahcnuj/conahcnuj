@@ -13,6 +13,12 @@
 # caller supplies one JSON document per API call, in call order.
 
 set -euo pipefail
+: "${CONAHCNUJ_TEST_MODE:=0}"
+export CONAHCNUJ_TEST_MODE
+if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
+  : "${GH_API_TEST_MODE:=1}"
+  export GH_API_TEST_MODE
+fi
 # Ignore SIGPIPE so a closed consumer (e.g. head) cannot kill this
 # shell or print "printf: write error: Broken pipe"; failed writes are
 # handled by the `2>/dev/null || true` guards on each printf.
@@ -110,11 +116,6 @@ gh_api_escape() {
 
 # Read a single line from stdin (used by every test-mode function so that a
 # caller can "feed a tape" of one JSON response per API call).
-# Normalize the offline-test flag (CONAHCNUJ_TEST_MODE canonical, TEST_MODE
-# legacy alias) so callers do not have to repeat the fallback.
-: "${CONAHCNUJ_TEST_MODE:=${TEST_MODE:-0}}"
-export CONAHCNUJ_TEST_MODE
-
 gh_api_read_line() {
   local line=""
   IFS= read -r line || true

@@ -50,8 +50,6 @@ conahcnuj が読む環境変数の全量です。値の意味や設定ファイ�
 | `CONAHCNUJ_CI` | - | `true` / `1` で CI モードを明示的に有効化（`GITHUB_ACTIONS` が無い環境向け） |
 
 
-`TEST_MODE` は legacy alias で、`CONAHCNUJ_TEST_MODE` が未設定のときだけ参照される。
-
 ## ドライバ ↔ プラグイン連携（自動設定）
 
 | 変数 | 方向 | 内容 |

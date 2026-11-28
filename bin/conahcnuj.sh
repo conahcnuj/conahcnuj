@@ -48,7 +48,6 @@
 #                            disables the pause)
 #   CONAHCNUJ_POLL_CONDITIONS_MIN/MAX  rate-limited poll window (default 15/60 s)
 #   CONAHCNUJ_TEST_MODE=1    offline driver test (mock API tape + mock opencode)
-#                            (TEST_MODE is the legacy alias for the same flag)
 #   CONAHCNUJ_COMMIT_MODEL   Co-Authored-By trailer value; when unset, the
 #                            driver uses the plugin label (provider
 #                            (model/effort)) or builds the same shape from
@@ -75,6 +74,16 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Offline-test flag: default off when unset (no legacy alias). In test mode,
+# the GH_API / OPENCODE mock flags default on too, so a single flag is enough
+# to run the whole driver offline; an explicit 0 on either still wins.
+: "${CONAHCNUJ_TEST_MODE:=0}"
+export CONAHCNUJ_TEST_MODE
+if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
+  : "${GH_API_TEST_MODE:=1}"
+  : "${OPENCODE_TEST_MODE:=1}"
+  export GH_API_TEST_MODE OPENCODE_TEST_MODE
+fi
 # In GitHub Actions (or with an explicit opt-in) the run ends as soon as the
 # PR has been handed to the reviewer: waiting for a human approval is not
 # realistic in CI, and the pull_request_review trigger starts the next run.
@@ -91,13 +100,6 @@ START_TIME="$(date +%s)"
 # CONAHCNUJ_COMMIT_MODEL for api-commit.sh, so a later commit must not treat
 # that export as a new explicit override.
 USER_COMMIT_MODEL="${CONAHCNUJ_COMMIT_MODEL:-}"
-
-# Normalize the offline-test flag once: CONAHCNUJ_TEST_MODE is canonical,
-# TEST_MODE is the legacy alias kept for backwards compatibility. Normalizing
-# here keeps the rest of the driver (and the libs it sources) free of the
-# repeated fallback.
-: "${CONAHCNUJ_TEST_MODE:=${TEST_MODE:-0}}"
-export CONAHCNUJ_TEST_MODE
 
 # shellcheck source=lib/rate-limit.sh
 . "${HERE}/../lib/rate-limit.sh"
