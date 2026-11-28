@@ -48,6 +48,7 @@
 #                            disables the pause)
 #   CONAHCNUJ_POLL_CONDITIONS_MIN/MAX  rate-limited poll window (default 15/60 s)
 #   CONAHCNUJ_TEST_MODE=1    offline driver test (mock API tape + mock opencode)
+#                            (TEST_MODE is the legacy alias for the same flag)
 #   CONAHCNUJ_COMMIT_MODEL   Co-Authored-By trailer value; when unset, the
 #                            driver uses the plugin label (provider
 #                            (model/effort)) or builds the same shape from
@@ -91,6 +92,13 @@ START_TIME="$(date +%s)"
 # that export as a new explicit override.
 USER_COMMIT_MODEL="${CONAHCNUJ_COMMIT_MODEL:-}"
 
+# Normalize the offline-test flag once: CONAHCNUJ_TEST_MODE is canonical,
+# TEST_MODE is the legacy alias kept for backwards compatibility. Normalizing
+# here keeps the rest of the driver (and the libs it sources) free of the
+# repeated fallback.
+CONAHCNUJ_TEST_MODE="${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}"
+export CONAHCNUJ_TEST_MODE
+
 # shellcheck source=lib/rate-limit.sh
 . "${HERE}/../lib/rate-limit.sh"
 # shellcheck source=lib/gh-api.sh
@@ -112,7 +120,7 @@ else
 fi
 unset _driver_token
 
-if [[ "${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}" == "1" ]]; then
+if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
   # Offline tests must not sleep.
   rate_limit_poll_sleep() { :; }
 fi
@@ -583,7 +591,7 @@ commit_changes() {
   echo "Using coding agent's commit message: ${message}" >&2
   git add -A
   apply_driver_commit_model
-  if [[ "${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}" == "1" ]]; then
+  if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
     if [[ -n "${CONAHCNUJ_COMMIT_MODEL:-}" ]] && ! printf '%s\n' "${message}" | grep -qiE '^[[:space:]]*co-authored-by:'; then
       git -c commit.gpgsign=false commit -q -m "${message}" -m "Co-Authored-By: ${CONAHCNUJ_COMMIT_MODEL}" 2>/dev/null || echo "WARNING: nothing to commit (test mode)" >&2
     else
@@ -618,7 +626,7 @@ remove_empty_todo() {
   echo "Removing the empty TODO.jsonl so it never reaches main." >&2
   rm -f TODO.jsonl
   git add -A -- TODO.jsonl >/dev/null 2>&1 || true
-  if [[ "${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}" == "1" ]]; then
+  if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
     git -c commit.gpgsign=false commit -q -m "Remove empty TODO.jsonl before hand-off" 2>/dev/null || true
     return 0
   fi
@@ -912,7 +920,7 @@ checkout_branch_head() {
 fetch_new_branch_ref() {
   local branch="${1}" attempt pause
   pause="${CONAHCNUJ_BRANCH_FETCH_RETRY_PAUSE:-2}"
-  [[ "${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}" == "1" ]] && pause=0
+  [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]] && pause=0
   for attempt in 1 2 3; do
     if [[ "${attempt}" -lt 3 ]]; then
       if git fetch origin "${branch}" >/dev/null 2>&1; then
@@ -964,7 +972,7 @@ ensure_issue_branch() {
   fi
   echo "Feature branch: ${branch} (from ${default_branch})" >&2
 
-  if [[ "${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}" == "1" ]]; then
+  if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
     clear_merge_state
     git checkout -B "${branch}" >/dev/null 2>&1 || git checkout -b "${branch}"
     printf '%s\n' "${branch}"
@@ -1049,7 +1057,7 @@ ensure_issue_branch() {
 ensure_pr_branch_head() {
   local owner="${1}" repo="${2}" head="${3}"
   echo "Checking out PR head branch ${head}..." >&2
-  if [[ "${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}" == "1" ]]; then
+  if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
     clear_merge_state
     git checkout -B "${head}" >/dev/null 2>&1 || git checkout -b "${head}"
     return 0
@@ -1086,7 +1094,7 @@ resolve_agent_branch_name() {
     printf '%s\n' "${current}"
     return 0
   fi
-  if [[ "${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}" != "1" ]]; then
+  if [[ "${CONAHCNUJ_TEST_MODE}" != "1" ]]; then
     if ! gh_api_create_branch "${owner}" "${repo}" "${want}" "${default_oid}" >/dev/null 2>&1; then
       echo "WARNING: could not create the remote branch ${want} (name in use?); keeping ${current}." >&2
       printf '%s\n' "${current}"
@@ -1750,7 +1758,7 @@ request_review_with_retry() {
 # value that is not a number) disables the pause.
 hand_off_retry_pause() {
   local seconds="${CONAHCNUJ_HANDOFF_RETRY_SECONDS:-15}"
-  if [[ "${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}" == "1" ]]; then
+  if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
     return 0
   fi
   if [[ "${seconds}" =~ ^[0-9]+$ ]] && (( seconds > 0 )); then
@@ -2320,7 +2328,7 @@ start_issue() {
     printf '{"task":"Implement issue #%s: %s"}\n' "${num}" "${title}" > TODO.jsonl
     INITIAL_TODO_CONTENT="$(cat TODO.jsonl)"
     git add -A -- TODO.jsonl >/dev/null 2>&1 || true
-    if [[ "${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}" == "1" ]]; then
+    if [[ "${CONAHCNUJ_TEST_MODE}" == "1" ]]; then
       git -c commit.gpgsign=false commit -q -m "Initial commit" 2>/dev/null || true
     else
       bash "${HERE}/../gh-app/api-commit.sh" -m "Initial commit" >/dev/null 2>&1 || echo "WARNING: could not create the initial commit; continuing." >&2
@@ -2517,7 +2525,7 @@ main() {
   # configuration errors, not driver bugs, so they stop the run before the
   # bug-report trap is registered: the clear error on stderr is the report, and
   # filing an issue for it would only add noise (#309 / #841).
-  if [[ "${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}" != "1" ]]; then
+  if [[ "${CONAHCNUJ_TEST_MODE}" != "1" ]]; then
     verify_repo_alignment "${repo_info}"
     verify_app_repo_access "${repo_info}"
   fi
@@ -2532,7 +2540,7 @@ main() {
   # detailed error log to the bug report (see run_log_start).
   run_log_start
 
-  if [[ "${CONAHCNUJ_TEST_MODE:-${TEST_MODE:-0}}" != "1" ]]; then
+  if [[ "${CONAHCNUJ_TEST_MODE}" != "1" ]]; then
     bash "${HERE}/../gh-app/setup-git.sh"
   fi
 
