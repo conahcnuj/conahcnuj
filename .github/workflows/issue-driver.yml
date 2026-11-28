@@ -154,13 +154,16 @@ jobs:
               curl -fsSL https://raw.githubusercontent.com/PowerShell/PowerShell/master/tools/install-powershell.sh | bash
             fi
           fi
-          if command -v pwsh >/dev/null 2>&1; then
-            PWSH="$(command -v pwsh)"
-          elif command -v powershell >/dev/null 2>&1; then
-            PWSH="$(command -v powershell)"
-          else
-            PWSH=""
-          fi
+          PWSH=""
+          for candidate in pwsh powershell /usr/bin/pwsh /usr/local/bin/pwsh /opt/microsoft/powershell/7/pwsh; do
+            if command -v "${candidate}" >/dev/null 2>&1; then
+              PWSH="$(command -v "${candidate}")"
+              break
+            elif [[ -x "${candidate}" ]]; then
+              PWSH="${candidate}"
+              break
+            fi
+          done
           if [[ -n "${PWSH}" ]]; then
             "${PWSH}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${GITHUB_WORKSPACE}/driver/install.ps1"
           else
