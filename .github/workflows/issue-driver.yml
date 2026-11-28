@@ -142,10 +142,34 @@ jobs:
 
       - name: Install the driver (cross-repository)
         if: ${{ (inputs.repository || github.repository) != job.workflow_repository }}
-        shell: pwsh
+        shell: bash
         run: |
-          & "${env:GITHUB_WORKSPACE}/driver/install.ps1"
-          Remove-Item -Recurse -Force "${env:GITHUB_WORKSPACE}/driver"
+          # Install using the same procedure as README.md (install.ps1), which
+          # deploys the driver, gh-app (two trees), plugin, global rules and
+          # git-vc. The step may run inside a container image that does not
+          # ship PowerShell, so install pwsh on demand first; install.ps1 itself
+          # is the single source of truth for the layout.
+          if ! command -v pwsh >/dev/null 2>&1 && ! command -v powershell >/dev/null 2>&1; then
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL https://raw.githubusercontent.com/PowerShell/PowerShell/master/tools/install-powershell.sh | bash
+            fi
+          fi
+          PWSH=""
+          for candidate in pwsh powershell /usr/bin/pwsh /usr/local/bin/pwsh /opt/microsoft/powershell/7/pwsh; do
+            if command -v "${candidate}" >/dev/null 2>&1; then
+              PWSH="$(command -v "${candidate}")"
+              break
+            elif [[ -x "${candidate}" ]]; then
+              PWSH="${candidate}"
+              break
+            fi
+          done
+          if [[ -z "${PWSH}" ]]; then
+            echo "::error::PowerShell (pwsh/powershell) is required to run install.ps1, but could not be installed." >&2
+            exit 1
+          fi
+          "${PWSH}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${GITHUB_WORKSPACE}/driver/install.ps1"
+          rm -rf "${GITHUB_WORKSPACE}/driver"
 
       # Check out the target repository normally (into the working tree root)
       # when it is not the driver's own repository. This runs after the driver
@@ -201,6 +225,7 @@ jobs:
           BOT_USER_ID="$(bash "${ghapp}/bot-user-id.sh")"
           printf 'BOT_USER_ID="%s"\n' "${BOT_USER_ID}" >> "${ghapp}/app.env"
           if [[ "${CROSS_REPO}" == "true" ]]; then
+            mkdir -p "${ghapp_config}"
             cp "${ghapp}/app.env" "${ghapp_config}/app.env"
           fi
 
