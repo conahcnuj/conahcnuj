@@ -150,8 +150,36 @@ jobs:
           # ship PowerShell, so install pwsh on demand first; install.ps1 itself
           # is the single source of truth for the layout.
           if ! command -v pwsh >/dev/null 2>&1 && ! command -v powershell >/dev/null 2>&1; then
-            if command -v curl >/dev/null 2>&1; then
-              curl -fsSL https://raw.githubusercontent.com/PowerShell/PowerShell/master/tools/install-powershell.sh | bash
+            # Microsoft's PowerShell installer rejects Debian 12
+            # ("ERROR: unsupported Debian version (12)."), so install PowerShell
+            # from Microsoft's package repository directly instead. The .deb
+            # registers the signed repository and works on Debian (incl. 12 /
+            # bookworm) as well as Ubuntu, e.g.
+            # https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb
+            if command -v apt-get >/dev/null 2>&1; then
+              SUDO=""
+              if (( EUID != 0 )); then
+                SUDO="sudo"
+              fi
+              # shellcheck disable=SC1091
+              . /etc/os-release
+              ms_url=""
+              case "${ID}" in
+                debian)
+                  ms_url="https://packages.microsoft.com/config/debian/${VERSION_ID%%.*}/packages-microsoft-prod.deb"
+                  ;;
+                ubuntu)
+                  ms_url="https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb"
+                  ;;
+              esac
+              if [[ -n "${ms_url}" ]]; then
+                tmpdir="$(mktemp -d)"
+                curl -fsSL "${ms_url}" -o "${tmpdir}/packages-microsoft-prod.deb"
+                ${SUDO} dpkg -i "${tmpdir}/packages-microsoft-prod.deb" >/dev/null 2>&1 || true
+                ${SUDO} apt-get update
+                ${SUDO} apt-get install -y powershell
+                rm -rf "${tmpdir}"
+              fi
             fi
           fi
           PWSH=""
